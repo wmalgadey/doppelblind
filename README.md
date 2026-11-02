@@ -2,6 +2,10 @@
 
 Orchestrates separate coding-agent roles and enforces the information boundaries between them. See [docs/product.md](docs/product.md).
 
+## Why "Doppelblind"
+
+The name comes from the double-blind study: neither the participant nor the researcher knows who receives what, so that nobody's expectation can shape the result. Doppelblind applies the same idea to coding agents. The agent that writes the acceptance tests never sees the implementation, the agent that implements cannot change those tests, and the agent that verifies never reads the implementer's report. A check only counts if it cannot share the mistake it is meant to find.
+
 ## Usage
 
 Requires Node.js 24 and the [Claude Code](https://claude.com/claude-code) CLI.
