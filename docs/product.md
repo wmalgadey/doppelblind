@@ -14,7 +14,7 @@ Doppelblind is not for me alone; it is not restricted to particular users. Their
 
 Doppelblind works with any project structure. A project fulfils a contract — where its binding sources are, how a source is cited, which paths each role may write, which paths are protected, how a test names the criterion it checks, where the risk matrix is — and does not prescribe formats: a flat decision file or an ADR directory, a product vision or another description of what the system should do are equally valid, as long as each source is citable and says what is in force.
 
-A spec cites only what binds the spec: a description of what the system should do, decisions that say they bind the spec, and the answers I gave to the open questions of any spec. Each decision says whether it binds the spec or only the plan; one that binds only the plan, such as a runtime, a language or a library, is never cited by a spec. Specs themselves are not sources, because a model writes them.
+A spec cites only what binds the spec: a description of what the system should do, decisions that say they bind the spec, and the answers I gave to the open questions of any spec. Each decision says whether it binds the spec or only the plan; one that binds only the plan, such as a runtime, a language or a library, is never cited by a spec. Specs themselves are not sources, because a model writes them. An answer is only what I chose: my own text, `free` (left open on purpose, nobody tests it) or `out of scope` (not part of this change). That a question stayed unanswered is recorded by the orchestrator, never written as an answer and never given to the spec agent.
 
 The contract is declared in the project, in a `.doppelblind.conf` file. Run state also lives in the project for now. Role prompts, harness settings and output schemas do not live in the project; nothing a role runs with is loaded from a directory that role can write. What Doppelblind produces — specs, acceptance tests, their lock and inventory — are ordinary project artifacts and are versioned like any other. For now I commit them myself (see OUT-13).
 
@@ -31,12 +31,16 @@ Agents run through an agent CLI in headless mode. I use a Claude subscription, n
 ## 3. Core loop
 
 1. I write a brief.
-2. The spec agent writes binding criteria, each with an ID and a cited source, separate from wishes, and lists every decision the brief does not make as an open question without a suggested answer. I answer them, or leave a decision open on purpose; the spec agent then runs again from scratch on the brief, the sources and every answer so far, until no open question concerns a criterion or a brief has had three rounds.
-3. The test author, who never sees implementation code or plan, writes acceptance tests per criterion and lists every assumption it had to make.
-4. If the risk matrix or the assumptions call for it, I approve before implementation. The acceptance tests are frozen.
-5. The implementer works until the acceptance tests are green or reports a divergence; the verifier, who never sees the implementer's report, returns findings until there are none or a limit is reached.
-6. If the change carries technical risk, I approve the merge; otherwise it merges automatically once all gates are green.
-7. I see what each run did, where it diverged, what it cost and how it ended.
+2. The spec agent writes binding criteria, each with an ID and a cited source, separate from wishes, and lists every decision that neither the brief nor a source makes as an open question without a suggested answer.
+3. I answer the open questions: with my own text, with `free` to leave a decision open on purpose, or with `out of scope` to keep it out of this change.
+4. The orchestrator records my answers and lists every open question I left without one, with the criteria it concerns. For each, I choose `free`, `out of scope`, or to stop and answer it later.
+5. I decide whether another clarify round runs. If it does, the spec agent runs again from scratch on the brief, the sources and every answer so far, never on its earlier spec and never told which round it is, and the loop continues at step 3.
+6. If it does not, the spec is final. If an answer has not reached the spec agent yet, it runs once more, and its open questions are recorded as unanswered. Every open question is then left open, out of scope or unanswered.
+7. The test author, who never sees implementation code or plan, writes acceptance tests per criterion and lists every assumption it had to make.
+8. If the risk matrix or the assumptions call for it, I approve before implementation. The acceptance tests are frozen.
+9. The implementer works until the acceptance tests are green or reports a divergence; the verifier, who never sees the implementer's report, returns findings until there are none or a limit is reached.
+10. If the change carries technical risk, I approve the merge; otherwise it merges automatically once all gates are green.
+11. I see what each run did, where it diverged, what it cost and how it ended.
 
 ## 4. Non-goals
 
@@ -53,7 +57,7 @@ Agents run through an agent CLI in headless mode. I use a Claude subscription, n
 1. Every boundary that matters has a first line that holds even if the agent ignores or circumvents it: what a role must not see is absent from its checkout or mount; what it must not change is read-only and rejected by a path check; what is frozen is secured by hash and test inventory. Harness rules and prompts are a second line at most.
 2. No agent is rewarded on the signal that checks it, and no agent's account of its own work counts as evidence. Signals are produced by systems: git, test reports, gates, the orchestrator.
 3. The orchestrator is deterministic code. It holds the state, starts exactly one role per step in a fresh context, validates structured output against its schema — invalid output is a failure, never an empty list — and decides whether an approval is needed: one yes suffices, an uncertain answer counts as yes. The implementer never classifies risk.
-4. Every run is bounded by rounds per loop, time and cost. I can set the time and cost limits when I start a run. At a limit, a human decides; nothing is approved automatically by waiting.
+4. Every agent run is bounded by time and cost, and every loop that runs without me is bounded by rounds. A loop that starts a round only after I say so, such as the spec loop, is bounded by me. I can set the time and cost limits when I start a run. At a limit, a human decides; nothing is approved automatically by waiting.
 5. Sources are written only by people.
 6. Every run records its state, its logs and the input and output of every role in the project's .doppelblind folder, for later analysis.
 
