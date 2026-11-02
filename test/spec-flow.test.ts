@@ -49,7 +49,6 @@ describe("spec-flow", () => {
   test("a second run for the same brief reruns the agent with the answers, never the earlier spec, and replaces spec.md", async () => {
     const root = project();
     const first = await runSpecFlow({ cwd: root, brief: "docs/briefs/greeting.md", ui: recordingUi(), agent: fakeAgent(sampleSpec()) });
-    assert.equal(first.round, 1);
     writeFileSync(first.specFile, readFileSync(first.specFile, "utf8").replace("**Answer:**\n", "**Answer:**\n\nHello and welcome.\n"));
 
     const calls: AgentRequest[] = [];
@@ -62,9 +61,8 @@ describe("spec-flow", () => {
     const second = await runSpecFlow({ cwd: root, brief: "docs/briefs/greeting.md", ui, agent: fakeAgent(rerun, calls) });
 
     assert.equal(second.specFile, first.specFile);
-    assert.equal(second.round, 2);
     assert.deepEqual(readdirSync(path.join(root, "specs")), ["001-greet-everyone"]);
-    assert.ok(ui.events.includes("note: round 2: rerunning with 1 answers, 1 new from specs/001-greet-everyone/spec.md"));
+    assert.ok(ui.events.includes("note: spec-create run: rerunning with 1 answers, 1 new from specs/001-greet-everyone/spec.md"));
 
     const message = calls[0].userMessage;
     assert.ok(!message.includes("<spec"));
@@ -73,7 +71,8 @@ describe("spec-flow", () => {
     assert.ok(message.endsWith("Write the specification for this brief."));
 
     const md = readFileSync(second.specFile, "utf8");
-    assert.match(md, /## Open questions\n\n### Q-01\n\nIn which language is the greeting\?\n\n\*\*Answer:\*\*\n$/);
+    // the second run's question follows the brief's highest question number instead of reusing Q-01
+    assert.match(md, /## Open questions\n\n### Q-02\n\nIn which language is the greeting\?\n\n\*\*Answer:\*\*\n$/);
     assert.ok(!md.includes("Answered questions"));
     assert.match(readFileSync(path.join(root, "specs/001-greet-everyone/answers.md"), "utf8"), /Hello and welcome\./);
   });
@@ -85,15 +84,14 @@ describe("spec-flow", () => {
     writeFileSync(first.specFile, "# Something else entirely\n");
     const second = await runSpecFlow({ ...opts, agent: fakeAgent(sampleSpec({ short_name: "other-name" })) });
     assert.equal(second.specFile, first.specFile);
-    assert.equal(second.round, 2);
     const state = JSON.parse(readFileSync(path.join(root, ".doppelblind/specs.json"), "utf8"));
     assert.deepEqual(Object.keys(state), ["docs/briefs/greeting.md"]);
     assert.equal(state["docs/briefs/greeting.md"].folder, "specs/001-greet-everyone");
-    assert.equal(state["docs/briefs/greeting.md"].rounds, 2);
-    assert.equal(state["docs/briefs/greeting.md"].status, "open");
+    // ready or open is computed from the spec, never stored
+    assert.deepEqual(Object.keys(state["docs/briefs/greeting.md"]).sort(), ["folder", "run"]);
   });
 
-  test("answers accumulate across rounds with their question's text", async () => {
+  test("answers accumulate across spec-create runs with their question's text", async () => {
     const root = project();
     const opts = { cwd: root, brief: "docs/briefs/greeting.md", ui: recordingUi() };
     const answer = (file: string, text: string) => writeFileSync(file, readFileSync(file, "utf8").replace("**Answer:**\n", `**Answer:**\n\n${text}\n`));
@@ -122,8 +120,11 @@ describe("spec-flow", () => {
     assert.ok(calls[0].userMessage.includes('<answers path="specs/001-greet-everyone/answers.md">\nNone.\n</answers>'));
     assert.ok(!existsSync(path.join(root, "specs/001-greet-everyone/answers.md")));
 
+    // a spec with open questions changes on every rerun, since new questions get new IDs; one without stays the same
+    const noQuestions = sampleSpec({ open_questions: [] });
+    await runSpecFlow({ ...opts, ui: recordingUi(), agent: fakeAgent(noQuestions) });
     const unchanged = recordingUi();
-    await runSpecFlow({ ...opts, ui: unchanged, agent: fakeAgent(sampleSpec()) });
+    await runSpecFlow({ ...opts, ui: unchanged, agent: fakeAgent(noQuestions) });
     assert.ok(unchanged.events.includes("done: Writing spec.md (specs/001-greet-everyone/spec.md, unchanged)"));
   });
 
@@ -131,6 +132,8 @@ describe("spec-flow", () => {
     const root = project();
     const opts = { cwd: root, brief: "docs/briefs/greeting.md", ui: recordingUi() };
     const first = await runSpecFlow({ ...opts, agent: fakeAgent(sampleSpec()) });
+    const stateFile = path.join(root, ".doppelblind/specs.json");
+    const stateBefore = readFileSync(stateFile, "utf8");
     const saved = readFileSync(first.specFile, "utf8").replace("**Answer:**\n", "**Answer:**\n\nHello.\n");
     const savingAgent: Agent = async (request) => {
       writeFileSync(first.specFile, saved);
@@ -138,7 +141,7 @@ describe("spec-flow", () => {
     };
     await assert.rejects(runSpecFlow({ ...opts, agent: savingAgent }), /changed while the agent was running; it was not overwritten/);
     assert.equal(readFileSync(first.specFile, "utf8"), saved);
-    assert.equal(JSON.parse(readFileSync(path.join(root, ".doppelblind/specs.json"), "utf8"))["docs/briefs/greeting.md"].rounds, 1);
+    assert.equal(readFileSync(stateFile, "utf8"), stateBefore);
   });
 
   test("a spec is ready when no open question concerns a criterion, and open otherwise", async () => {
@@ -158,7 +161,8 @@ describe("spec-flow", () => {
     await runSpecFlow({ cwd: root, brief: "docs/briefs/greeting.md", ui: recordingUi(), agent: fakeAgent(sampleSpec()) });
     const second = await runSpecFlow({ cwd: root, brief: "docs/briefs/farewell.md", ui: recordingUi(), agent: fakeAgent(spec) });
     assert.equal(path.basename(path.dirname(second.specFile)), "002-greet-everyone");
-    assert.equal(second.round, 1);
+    // question numbers are per brief: the other brief's first spec starts at Q-01 again
+    assert.match(readFileSync(second.specFile, "utf8"), /### Q-01\n/);
   });
 
   test("the brief path is relative to the current directory", async () => {
@@ -271,15 +275,12 @@ describe("spec-flow: continuing a feature", () => {
     return existsSync(file) ? readFileSync(file, "utf8") : "";
   }
 
-  /** Every answer in answers.md, as "<round> <id> <answer>". */
+  /** Every answer in answers.md, as "<id> <answer>". */
   function loggedAnswers(root: string) {
-    return [...answersMd(root).matchAll(/^## Round (\d+)$|^### (Q-\d+)\n\n.*\n\n\*\*Answer:\*\*\n\n(.*)$/gm)].reduce(
-      (acc, m) => (m[1] ? { ...acc, round: m[1] } : { ...acc, list: [...acc.list, `${acc.round} ${m[2]} ${m[3]}`] }),
-      { round: "", list: [] as string[] },
-    ).list;
+    return [...answersMd(root).matchAll(/^### (Q-\d+)\n\n.*\n\n\*\*Answer:\*\*\n\n(.*)$/gm)].map((m) => `${m[1]} ${m[2]}`);
   }
 
-  async function firstRound(output = TWO_QUESTIONS) {
+  async function firstSpecCreateRun(output = TWO_QUESTIONS) {
     const root = project();
     const first = await runSpecFlow({ cwd: root, brief: BRIEF_PATH, ui: recordingUi(), agent: fakeAgent(output), clarify: true });
     return { root, specFile: first.specFile };
@@ -290,17 +291,17 @@ describe("spec-flow: continuing a feature", () => {
     return { ui, run: runSpecFlow({ cwd: root, brief: BRIEF_PATH, ui, agent, clarify: true }) };
   }
 
-  test("there is no round limit and no status limit reached", async () => {
-    const { root } = await firstRound();
-    for (let round = 2; round <= 5; round++) {
+  test("there is no limit on spec-create runs and no status limit reached", async () => {
+    const { root } = await firstSpecCreateRun();
+    for (let run = 2; run <= 5; run++) {
       const result = await runSpecFlow({ cwd: root, brief: BRIEF_PATH, ui: recordingUi(), agent: fakeAgent(TWO_QUESTIONS) });
-      assert.equal(result.round, round);
       assert.equal(result.status, "open");
     }
     const { run } = feature(root, ["free", "free", "yes"], fakeAgent(TWO_QUESTIONS));
     const sixth = await run;
-    assert.equal(sixth.round, 6);
     assert.equal(sixth.status, "open");
+    // six runs of two questions each: the sixth asks Q-11 and Q-12
+    assert.match(readFileSync(sixth.specFile, "utf8"), /### Q-11\n[\s\S]*### Q-12\n/);
     assert.ok(!readFileSync(path.join(root, ".doppelblind/specs.json"), "utf8").includes("limit reached"));
   });
 
@@ -314,69 +315,69 @@ describe("spec-flow: continuing a feature", () => {
 
     const calls: AgentRequest[] = [];
     const { run } = feature(root, ["free", "yes"], fakeAgent(unconcerned, calls));
-    assert.equal((await run).round, 2);
+    assert.equal((await run).status, "ready");
     assert.equal(calls.length, 1);
   });
 
-  test("answers in spec.md are added to answers.md, and each unanswered question is listed with the titles of its criteria", async () => {
-    const { root, specFile } = await firstRound();
+  test("answers in spec.md are added to answers.md, and each unanswered question is asked with the titles of its criteria", async () => {
+    const { root, specFile } = await firstSpecCreateRun();
     answer(specFile, "Q-02", "Blue.");
     const { ui, run } = feature(root, ["free", "yes"], fakeAgent(TWO_QUESTIONS));
     await run;
-    assert.deepEqual(loggedAnswers(root), ["1 Q-01 free", "1 Q-02 Blue."]);
-    const listing = ui.events.filter((e) => e.startsWith("note: Q-0") || e.startsWith("note:   concerns"));
-    assert.deepEqual(listing, ["note: Q-01: Which words does the greeting use?", "note:   concerns AC-001: Greeter greets"]);
+    assert.deepEqual(loggedAnswers(root), ["Q-01 free", "Q-02 Blue."]);
+    assert.ok(ui.events.includes("note: 1 of 2 open questions have no answer."));
+    assert.ok(!ui.events.some((e) => e.startsWith("note: Q-0")));
+    assert.ok(ui.events.includes("detail: concerns AC-001: Greeter greets"));
     assert.deepEqual(ui.events.filter((e) => e.startsWith("choose:")), [
-      "choose: Q-01: Which words does the greeting use? -> free",
-      "choose: Another clarify round? -> yes",
+      "choose: Q-01 (1/1 unanswered): Which words does the greeting use? -> free",
+      "choose: Start another spec-create run? -> yes",
     ]);
   });
 
-  test("free is stored in answers.md as the user's answer and the next round receives it", async () => {
-    const { root } = await firstRound();
+  test("free is stored in answers.md as the user's answer and the next spec-create run receives it", async () => {
+    const { root } = await firstSpecCreateRun();
     const calls: AgentRequest[] = [];
     const { run } = feature(root, ["free", "free", "yes"], fakeAgent(sampleSpec({ open_questions: [] }), calls));
     const result = await run;
-    assert.deepEqual(loggedAnswers(root), ["1 Q-01 free", "1 Q-02 free"]);
+    assert.deepEqual(loggedAnswers(root), ["Q-01 free", "Q-02 free"]);
     assert.ok(calls[0].userMessage.includes("**Question:** Which words does the greeting use?\n\n**Answer:**\n\nfree\n"));
     assert.equal(result.leftOpen, 2);
     const md = readFileSync(result.specFile, "utf8");
-    assert.match(md, /## Left open\n\n- Q-01 \(round 1\): Which words does the greeting use\?\n- Q-02 \(round 1\): Which colour is the greeting\?\n/);
+    assert.match(md, /## Left open\n\n- Q-01: Which words does the greeting use\?\n- Q-02: Which colour is the greeting\?\n/);
   });
 
   test("out of scope is stored in answers.md as the user's answer", async () => {
-    const { root } = await firstRound();
+    const { root } = await firstSpecCreateRun();
     const { run } = feature(root, ["out of scope", "free", "yes"], fakeAgent(sampleSpec({ open_questions: [] })));
     const result = await run;
-    assert.deepEqual(loggedAnswers(root), ["1 Q-01 out of scope", "1 Q-02 free"]);
+    assert.deepEqual(loggedAnswers(root), ["Q-01 out of scope", "Q-02 free"]);
     assert.equal(result.outOfScope, 1);
-    assert.match(readFileSync(result.specFile, "utf8"), /## Out of scope\n\n- Q-01 \(round 1\): Which words does the greeting use\?\n/);
+    assert.match(readFileSync(result.specFile, "utf8"), /## Out of scope\n\n- Q-01: Which words does the greeting use\?\n/);
   });
 
-  test("stop writes nothing for that question, ends the command, and the user can answer it in spec.md and run again", async () => {
-    const { root, specFile } = await firstRound();
+  test("stop writes nothing for that question, keeps earlier choices in spec.md, and the user can answer it there and run again", async () => {
+    const { root, specFile } = await firstSpecCreateRun();
     const before = readFileSync(specFile, "utf8");
     const calls: AgentRequest[] = [];
-    // no answer to "Another clarify round?" is scripted: asking it would fail the test
+    // no answer to "Start another spec-create run?" is scripted: asking it would fail the test
     const { run } = feature(root, ["free", "stop"], fakeAgent(TWO_QUESTIONS, calls));
     const result = await run;
     assert.deepEqual(result.stopped, ["Q-02"]);
     assert.equal(calls.length, 0);
-    assert.deepEqual(loggedAnswers(root), ["1 Q-01 free"]);
-    assert.equal(readFileSync(specFile, "utf8"), before);
-    assert.equal(state(root).rounds, 1);
-    assert.equal(state(root).status, "open");
+    assert.deepEqual(loggedAnswers(root), []);
+    assert.equal(readFileSync(specFile, "utf8"), before.replace("use?\n\n**Answer:**\n\n\n### Q-02", "use?\n\n**Answer:**\n\nfree\n\n### Q-02"));
+    assert.equal(state(root).final, undefined);
 
     answer(specFile, "Q-02", "Blue.");
     const again = feature(root, ["yes"], fakeAgent(TWO_QUESTIONS, calls));
     await again.run;
-    assert.deepEqual(again.ui.events.filter((e) => e.startsWith("choose:")), ["choose: Another clarify round? -> yes"]);
-    assert.deepEqual(loggedAnswers(root), ["1 Q-01 free", "1 Q-02 Blue."]);
+    assert.deepEqual(again.ui.events.filter((e) => e.startsWith("choose:")), ["choose: Start another spec-create run? -> yes"]);
+    assert.deepEqual(loggedAnswers(root), ["Q-01 free", "Q-02 Blue."]);
     assert.equal(calls.length, 1);
   });
 
   test("no with an answer the agent has not received runs the agent once more and records its questions as unanswered", async () => {
-    const { root, specFile } = await firstRound();
+    const { root, specFile } = await firstSpecCreateRun();
     answer(specFile, "Q-01", "Hello.");
     const calls: AgentRequest[] = [];
     const { run } = feature(root, ["free", "no"], fakeAgent(TWO_QUESTIONS, calls));
@@ -385,21 +386,21 @@ describe("spec-flow: continuing a feature", () => {
     assert.equal(calls.length, 1);
     assert.ok(calls[0].userMessage.includes("Hello."));
     assert.equal(result.status, "final");
-    assert.equal(result.round, 2);
     assert.equal(result.unanswered, 2);
     assert.equal(result.leftOpen, 1);
     assert.equal(result.outOfScope, 0);
     assert.equal(result.openQuestions, 0);
-    assert.equal(state(root).status, "final");
-    assert.deepEqual(state(root).events, [{ event: "unanswered", round: 2, count: 2, questions: ["Q-01", "Q-02"] }]);
+    assert.equal(state(root).final, true);
+    // the extra run's questions follow Q-01 and Q-02 of the first run
+    assert.deepEqual(state(root), { folder: "specs/001-greet-everyone", run: state(root).run, final: true });
 
     const md = readFileSync(result.specFile, "utf8");
-    assert.match(md, /## Unanswered\n\n- Q-01: Which words does the greeting use\?\n- Q-02: Which colour is the greeting\?\n\n## Open questions\n\nNone\.\n$/);
-    assert.match(md, /### AC-001: Greeter greets\n[\s\S]*?Unanswered: Q-01\n/);
+    assert.match(md, /## Unanswered\n\n- Q-03: Which words does the greeting use\?\n- Q-04: Which colour is the greeting\?\n\n## Open questions\n\nNone\.\n$/);
+    assert.match(md, /### AC-001: Greeter greets\n[\s\S]*?Unanswered: Q-03\n/);
   });
 
   test("no with only free and out of scope answers does not run the agent and renders spec.md from the last output", async () => {
-    const { root, specFile } = await firstRound();
+    const { root, specFile } = await firstSpecCreateRun();
     const calls: AgentRequest[] = [];
     const { run } = feature(root, ["free", "out of scope", "no"], fakeAgent(TWO_QUESTIONS, calls));
     const result = await run;
@@ -407,9 +408,7 @@ describe("spec-flow: continuing a feature", () => {
     assert.equal(calls.length, 0);
     assert.equal(result.specFile, specFile);
     assert.equal(result.status, "final");
-    assert.equal(result.round, 1);
     assert.deepEqual([result.leftOpen, result.outOfScope, result.unanswered, result.openQuestions], [1, 1, 0, 0]);
-    assert.equal(state(root).events, undefined);
 
     const md = readFileSync(specFile, "utf8");
     assert.match(md, /### AC-001: Greeter greets\n[\s\S]*?Left open: Q-01\n\n## Wishes/);
@@ -417,7 +416,7 @@ describe("spec-flow: continuing a feature", () => {
   });
 
   test("an answer free written in spec.md counts as free when finishing", async () => {
-    const { root, specFile } = await firstRound();
+    const { root, specFile } = await firstSpecCreateRun();
     answer(specFile, "Q-01", "free");
     answer(specFile, "Q-02", "out of scope");
     const calls: AgentRequest[] = [];
@@ -428,52 +427,138 @@ describe("spec-flow: continuing a feature", () => {
   });
 
   test("after finishing, every open question is in exactly one of left open, out of scope or unanswered", async () => {
-    const { root, specFile } = await firstRound();
+    const { root, specFile } = await firstSpecCreateRun();
     const three = sampleSpec({
       open_questions: [...TWO_QUESTIONS.open_questions, { id: "Q-03", question: "How loud is the greeting?", concerns: ["AC-001"] }],
     });
-    // round 2 asks three questions; Q-01 and Q-02 of round 1 are left open and out of scope
+    // Q-01 and Q-02 are left open and out of scope; the second run asks Q-03 to Q-05, the extra run Q-06 and Q-07
     await feature(root, ["free", "out of scope", "yes"], fakeAgent(three)).run;
-    answer(specFile, "Q-03", "Quietly.");
+    answer(specFile, "Q-05", "Quietly.");
     const result = await feature(root, ["free", "out of scope", "no"], fakeAgent(TWO_QUESTIONS)).run;
 
     const md = readFileSync(result.specFile, "utf8");
     const section = (name: string) => md.split(`## ${name}\n\n`)[1].split("\n\n")[0].trimEnd();
-    assert.equal(section("Left open"), "- Q-01 (round 1): Which words does the greeting use?\n- Q-01 (round 2): Which words does the greeting use?");
-    assert.equal(section("Out of scope"), "- Q-02 (round 1): Which colour is the greeting?\n- Q-02 (round 2): Which colour is the greeting?");
-    assert.equal(section("Unanswered"), "- Q-01: Which words does the greeting use?\n- Q-02: Which colour is the greeting?");
+    assert.equal(section("Left open"), "- Q-01: Which words does the greeting use?\n- Q-03: Which words does the greeting use?");
+    assert.equal(section("Out of scope"), "- Q-02: Which colour is the greeting?\n- Q-04: Which colour is the greeting?");
+    assert.equal(section("Unanswered"), "- Q-06: Which words does the greeting use?\n- Q-07: Which colour is the greeting?");
     assert.equal(section("Open questions"), "None.");
-    assert.ok(!md.includes("Q-03"));
+    assert.ok(!md.includes("Q-05"));
   });
 
   test("unanswered questions never appear in answers.md or in the agent's input", async () => {
-    const { root, specFile } = await firstRound();
+    const { root, specFile } = await firstSpecCreateRun();
     answer(specFile, "Q-01", "Hello.");
     await feature(root, ["free", "no"], fakeAgent(TWO_QUESTIONS)).run;
-    assert.deepEqual(loggedAnswers(root), ["1 Q-01 Hello.", "1 Q-02 free"]);
+    assert.deepEqual(loggedAnswers(root), ["Q-01 Hello.", "Q-02 free"]);
     assert.ok(!/unanswered/i.test(answersMd(root)));
     for (const run of readdirSync(path.join(root, ".doppelblind/runs"))) {
       assert.ok(!/unanswered/i.test(readFileSync(path.join(root, ".doppelblind/runs", run, "input.md"), "utf8")));
     }
   });
 
+  test("stop ends the command at once: later questions are not asked and nothing is written for them", async () => {
+    const { root, specFile } = await firstSpecCreateRun();
+    const before = readFileSync(specFile, "utf8");
+    const calls: AgentRequest[] = [];
+    // only one choice is scripted: asking Q-02 or "Start another spec-create run?" would fail the test
+    const { ui, run } = feature(root, ["stop"], fakeAgent(TWO_QUESTIONS, calls));
+    const result = await run;
+    assert.deepEqual(result.stopped, ["Q-01", "Q-02"]);
+    assert.deepEqual(ui.events.filter((e) => e.startsWith("choose:")), ["choose: Q-01 (1/2 unanswered): Which words does the greeting use? -> stop"]);
+    assert.equal(calls.length, 0);
+    assert.deepEqual(loggedAnswers(root), []);
+    assert.equal(readFileSync(specFile, "utf8"), before);
+  });
+
+  test("finish, once confirmed, ends the spec step at once and records every question still without an answer as unanswered", async () => {
+    const { root, specFile } = await firstSpecCreateRun();
+    const calls: AgentRequest[] = [];
+    // no answer to "Start another spec-create run?" is scripted: asking it would fail the test
+    const { ui, run } = feature(root, ["free", "finish", "yes"], fakeAgent(TWO_QUESTIONS, calls));
+    const result = await run;
+
+    assert.deepEqual(ui.events.filter((e) => e.startsWith("choose:")), [
+      "choose: Q-01 (1/2 unanswered): Which words does the greeting use? -> free",
+      "choose: Q-02 (2/2 unanswered): Which colour is the greeting? -> finish",
+      "choose: Finish the spec step? 1 questions still without an answer are recorded as unanswered. -> yes",
+    ]);
+    assert.equal(calls.length, 0);
+    assert.equal(result.status, "final");
+    assert.deepEqual([result.leftOpen, result.outOfScope, result.unanswered, result.openQuestions], [1, 0, 1, 0]);
+    assert.equal(state(root).final, true);
+    assert.deepEqual(Object.keys(state(root)).sort(), ["final", "folder", "run"]);
+    assert.deepEqual(loggedAnswers(root), ["Q-01 free"]);
+    const md = readFileSync(specFile, "utf8");
+    assert.match(md, /## Left open\n\n- Q-01: Which words does the greeting use\?\n\n## Out of scope\n\nNone\.\n\n## Unanswered\n\n- Q-02: Which colour is the greeting\?\n\n## Open questions\n\nNone\.\n$/);
+  });
+
+  test("finish with an answer the agent has not received runs the agent once more and records its questions as unanswered", async () => {
+    const { root, specFile } = await firstSpecCreateRun();
+    answer(specFile, "Q-01", "Hello.");
+    const calls: AgentRequest[] = [];
+    const result = await feature(root, ["finish", "yes"], fakeAgent(TWO_QUESTIONS, calls)).run;
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0].userMessage.includes("Hello."));
+    assert.equal(result.status, "final");
+    assert.match(readFileSync(result.specFile, "utf8"), /## Unanswered\n\n- Q-03: Which words does the greeting use\?\n- Q-04: Which colour is the greeting\?\n/);
+    assert.deepEqual(loggedAnswers(root), ["Q-01 Hello."]);
+  });
+
+  test("finish that is not confirmed asks the same question again", async () => {
+    const { root } = await firstSpecCreateRun();
+    const { ui, run } = feature(root, ["finish", "no", "free", "out of scope", "no"], fakeAgent(TWO_QUESTIONS));
+    const result = await run;
+    assert.deepEqual(ui.events.filter((e) => e.startsWith("choose:")), [
+      "choose: Q-01 (1/2 unanswered): Which words does the greeting use? -> finish",
+      "choose: Finish the spec step? 2 questions still without an answer are recorded as unanswered. -> no",
+      "choose: Q-01 (1/2 unanswered): Which words does the greeting use? -> free",
+      "choose: Q-02 (2/2 unanswered): Which colour is the greeting? -> out of scope",
+      "choose: Start another spec-create run? -> no",
+    ]);
+    assert.equal(result.unanswered, 0);
+  });
+
+  test("answers.md is written only after the clarify run, right before the next spec-create run", async () => {
+    const { root, specFile } = await firstSpecCreateRun();
+    answer(specFile, "Q-01", "Hello.");
+    const seen: string[] = [];
+    const ui = recordingUi(["free", "yes"]);
+    const choose = ui.choose;
+    ui.choose = async (...args) => {
+      seen.push(`asked: ${answersMd(root) === "" ? "no answers.md" : "answers.md"}`);
+      return choose(...args);
+    };
+    const agent: Agent = async (request) => {
+      seen.push(`agent: ${loggedAnswers(root).join(", ")}`);
+      return fakeAgent(TWO_QUESTIONS)(request);
+    };
+    await runSpecFlow({ cwd: root, brief: BRIEF_PATH, ui, agent, clarify: true });
+    assert.deepEqual(seen, ["asked: no answers.md", "asked: no answers.md", "agent: Q-01 Hello., Q-02 free"]);
+  });
+
+  test("answers.md is written when the spec step finishes without another spec-create run", async () => {
+    const { root } = await firstSpecCreateRun();
+    await feature(root, ["free", "out of scope", "no"], fakeAgent(TWO_QUESTIONS)).run;
+    assert.deepEqual(loggedAnswers(root), ["Q-01 free", "Q-02 out of scope"]);
+  });
+
   test("the orchestrator writes no answer the user did not choose", async () => {
-    const { root, specFile } = await firstRound();
+    const { root, specFile } = await firstSpecCreateRun();
     answer(specFile, "Q-01", "Hello.");
     await feature(root, ["stop"], fakeAgent(TWO_QUESTIONS)).run;
-    assert.deepEqual(loggedAnswers(root), ["1 Q-01 Hello."]);
+    assert.deepEqual(loggedAnswers(root), []);
     await feature(root, ["free", "no"], fakeAgent(TWO_QUESTIONS)).run;
-    assert.deepEqual(loggedAnswers(root), ["1 Q-01 Hello.", "1 Q-02 free"]);
+    assert.deepEqual(loggedAnswers(root), ["Q-01 Hello.", "Q-02 free"]);
     assert.ok(!readFileSync(specFile, "utf8").includes("**Answer:**\n\nfree"));
   });
 
-  test("the agent's input contains no round information and is the same in a final run as in any other", async () => {
+  test("the agent's input contains no run information and is the same in a final run as in any other", async () => {
     const inputs: string[] = [];
     for (const last of ["yes", "no"]) {
-      const { root, specFile } = await firstRound();
+      const { root, specFile } = await firstSpecCreateRun();
       answer(specFile, "Q-01", "Hello.");
       await feature(root, ["free", "yes"], fakeAgent(TWO_QUESTIONS)).run;
-      answer(specFile, "Q-01", "Welcome.");
+      answer(specFile, "Q-03", "Welcome.");
       const calls: AgentRequest[] = [];
       await feature(root, ["out of scope", last], fakeAgent(TWO_QUESTIONS, calls)).run;
       assert.equal(calls.length, 1);
@@ -481,13 +566,13 @@ describe("spec-flow: continuing a feature", () => {
     }
     assert.equal(inputs[0], inputs[1]);
     for (const input of inputs) {
-      assert.ok(!/round|last|final/i.test(input), input);
+      assert.ok(!/round|spec-create|run \d|last|final/i.test(input), input);
       assert.ok(input.includes("Hello.") && input.includes("Welcome.") && input.includes("free") && input.includes("out of scope"));
     }
   });
 
-  test("a final spec step starts no further round", async () => {
-    const { root } = await firstRound();
+  test("a final spec step starts no further spec-create run", async () => {
+    const { root } = await firstSpecCreateRun();
     await feature(root, ["free", "free", "no"], fakeAgent(TWO_QUESTIONS)).run;
     const calls: AgentRequest[] = [];
     await assert.rejects(feature(root, [], fakeAgent(TWO_QUESTIONS, calls)).run, /The spec step of docs\/briefs\/greeting.md is final/);

@@ -5,26 +5,17 @@ import { DoppelblindError } from "../errors.ts";
 
 export const STATE_FILE = ".doppelblind/specs.json";
 
+/** `final` once the spec step has ended; otherwise `ready` or `open`, computed from the spec, never stored. */
 export type SpecStatus = "ready" | "open" | "final";
-
-/** Open questions of a round that the user finished the spec step without answering. */
-export interface UnansweredEvent {
-  event: "unanswered";
-  round: number;
-  count: number;
-  questions: string[];
-}
 
 /** What the orchestrator records about the spec of one brief; nothing in it comes from the spec agent. */
 export interface BriefState {
   /** Project-relative path of the folder that holds the brief's spec.md. */
   folder: string;
-  /** Spec rounds run so far for the brief. */
-  rounds: number;
-  status: SpecStatus;
-  /** Project-relative path of the run folder of the last round, which holds the agent's validated output. */
+  /** Set once the spec step has ended; no further spec-create run starts. */
+  final?: true;
+  /** Project-relative path of the run folder of the last spec-create run, which holds the agent's validated output. */
   run?: string;
-  events?: UnansweredEvent[];
 }
 
 /** The recorded state of every brief that has a spec, keyed by the brief's project-relative path. */

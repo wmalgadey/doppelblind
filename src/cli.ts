@@ -55,11 +55,11 @@ async function main(argv: string[]): Promise<number> {
   const specFile = path.relative(process.cwd(), result.specFile);
   process.stderr.write(
     `\n  ${result.criteria} criteria, ${result.openQuestions} open questions.\n` +
-      `  Status: ${result.status} (round ${result.round})\n` +
+      `  Status: ${result.status}\n` +
       (result.status === "final"
         ? `  The spec step is final: ${result.leftOpen} questions left open, ${result.outOfScope} out of scope, ${result.unanswered} unanswered.\n`
         : result.stopped.length > 0
-          ? `  Stopped at ${result.stopped.join(", ")}: answer them in ${specFile}, then run again.\n`
+          ? `  Stopped at ${result.stopped[0]}: ${result.stopped.length} questions still have no answer. Answer them in ${specFile}, then run again.\n`
           : result.openQuestions > 0
             ? `  Answer the open questions in ${specFile}, then run again.\n`
             : "") +

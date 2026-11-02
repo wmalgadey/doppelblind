@@ -3,11 +3,9 @@ import { FREE, OUT_OF_SCOPE, type Answer } from "./answers.ts";
 
 /** What the orchestrator records about a spec's questions, besides the agent's output. */
 export interface QuestionRecord {
-  /** The round whose agent run wrote the spec; answers to its questions carry this round. */
-  round: number;
   /** Every answer given so far, as answers.md holds them. */
   answers: Answer[];
-  /** IDs of the spec's questions that the run state records as unanswered. */
+  /** IDs of the spec's questions that the spec step finished without an answer. */
   unanswered: string[];
 }
 
@@ -18,14 +16,14 @@ export interface QuestionSections {
   unanswered: OpenQuestion[];
 }
 
-const NO_RECORD: QuestionRecord = { round: 0, answers: [], unanswered: [] };
+const NO_RECORD: QuestionRecord = { answers: [], unanswered: [] };
 
 /**
  * Sorts questions into the sections of spec.md: a question of the spec is open until it has an answer
- * or is recorded as unanswered; every answer `free` or `out of scope`, of any round, is listed as such.
+ * or is recorded as unanswered; every answer `free` or `out of scope`, to any spec-create run, is listed as such.
  */
 export function questionSections(spec: SpecOutput, record: QuestionRecord = NO_RECORD): QuestionSections {
-  const answered = new Set(record.answers.filter((a) => a.round === record.round).map((a) => a.id));
+  const answered = new Set(record.answers.map((a) => a.id));
   return {
     open: spec.open_questions.filter((q) => !answered.has(q.id) && !record.unanswered.includes(q.id)),
     leftOpen: record.answers.filter((a) => a.answer === FREE),
@@ -37,9 +35,9 @@ export function questionSections(spec: SpecOutput, record: QuestionRecord = NO_R
 /** Renders a spec as Markdown. `briefLink` is the brief's path relative to the spec file. */
 export function renderSpec(spec: SpecOutput, briefPath: string, briefLink: string, record: QuestionRecord = NO_RECORD): string {
   const sections = questionSections(spec, record);
-  // only the spec's own questions concern its criteria; a bare ID is one of them
-  const current = (answers: Answer[]) => answers.filter((a) => a.round === record.round).map((a) => a.id);
-  const label = (a: Answer) => (a.round === record.round ? a.id : `${a.id} (round ${a.round})`);
+  // only the spec's own questions concern its criteria
+  const own = new Set(spec.open_questions.map((q) => q.id));
+  const current = (answers: Answer[]) => answers.filter((a) => own.has(a.id)).map((a) => a.id);
   const byCriterion: [string, string[]][] = [
     ["Open questions", sections.open.map((q) => q.id)],
     ["Left open", current(sections.leftOpen)],
@@ -73,7 +71,7 @@ export function renderSpec(spec: SpecOutput, briefPath: string, briefLink: strin
   for (const [section, answers] of [["Left open", sections.leftOpen], ["Out of scope", sections.outOfScope]] as const) {
     lines.push(`## ${section}`, "");
     if (answers.length === 0) lines.push("None.", "");
-    else lines.push(...answers.map((a) => `- ${label(a)}: ${a.question}`), "");
+    else lines.push(...answers.map((a) => `- ${a.id}: ${a.question}`), "");
   }
 
   lines.push("## Unanswered", "");

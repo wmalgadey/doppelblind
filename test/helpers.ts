@@ -25,7 +25,8 @@ export function recordingUi(choices: string[] = []): RecordingUi {
     events,
     banner: () => events.push("banner"),
     note: (text) => events.push(`note: ${text}`),
-    async choose(question, options) {
+    async choose(question, options, details = []) {
+      for (const d of details) events.push(`detail: ${d}`);
       const choice = choices.shift();
       if (choice === undefined || !options.includes(choice)) throw new Error(`unexpected choice for "${question}": ${choice}`);
       events.push(`choose: ${question} -> ${choice}`);

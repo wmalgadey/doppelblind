@@ -46,21 +46,28 @@ describe("render", () => {
     assert.match(md, /Sources: .*\n\nOpen questions: Q-01, Q-03\n\n## Wishes/);
   });
 
-  test("left open and out of scope list every answer free and out of scope, of any round, from the answers", () => {
+  test("left open and out of scope list every answer free and out of scope, to this spec or an earlier one, from the answers", () => {
+    const spec = sampleSpec({
+      open_questions: [
+        { id: "Q-04", question: "Which words?", concerns: ["AC-001"] },
+        { id: "Q-05", question: "Which colour?", concerns: ["AC-001"] },
+      ],
+    });
     const answers = [
-      { round: 1, id: "Q-01", question: "Which tone?", answer: "free" },
-      { round: 1, id: "Q-02", question: "Which font?", answer: "out of scope" },
-      { round: 1, id: "Q-03", question: "Which size?", answer: "Large." },
-      { round: 2, id: "Q-01", question: "Which words?", answer: "free" },
+      { id: "Q-01", question: "Which tone?", answer: "free" },
+      { id: "Q-02", question: "Which font?", answer: "out of scope" },
+      { id: "Q-03", question: "Which size?", answer: "Large." },
+      { id: "Q-04", question: "Which words?", answer: "free" },
     ];
-    const md = renderSpec(TWO_QUESTIONS, "b.md", "b.md", { round: 2, answers, unanswered: [] });
-    assert.match(md, /## Left open\n\n- Q-01 \(round 1\): Which tone\?\n- Q-01: Which words\?\n\n## Out of scope\n\n- Q-02 \(round 1\): Which font\?\n\n## Unanswered\n\nNone\.\n\n## Open questions\n\n### Q-02\n/);
+    const md = renderSpec(spec, "b.md", "b.md", { answers, unanswered: [] });
+    assert.match(md, /## Left open\n\n- Q-01: Which tone\?\n- Q-04: Which words\?\n\n## Out of scope\n\n- Q-02: Which font\?\n\n## Unanswered\n\nNone\.\n\n## Open questions\n\n### Q-05\n/);
+    assert.match(md, /Sources: .*\n\nOpen questions: Q-05\n\nLeft open: Q-04\n\n## Wishes/);
     assert.ok(!md.includes("Which size?"));
-    assert.ok(!md.includes("### Q-01"));
+    assert.ok(!md.includes("### Q-04"));
   });
 
   test("unanswered lists the questions the record names, and they are no longer open", () => {
-    const md = renderSpec(TWO_QUESTIONS, "b.md", "b.md", { round: 2, answers: [], unanswered: ["Q-01", "Q-02"] });
+    const md = renderSpec(TWO_QUESTIONS, "b.md", "b.md", { answers: [], unanswered: ["Q-01", "Q-02"] });
     assert.match(md, /## Unanswered\n\n- Q-01: Which words\?\n- Q-02: Which colour\?\n\n## Open questions\n\nNone\.\n$/);
   });
 
@@ -75,12 +82,11 @@ describe("render", () => {
       ],
     });
     const answers = [
-      { round: 1, id: "Q-03", question: "Which font?", answer: "free" },
-      { round: 2, id: "Q-02", question: "Which colour?", answer: "free" },
-      { round: 2, id: "Q-03", question: "Which font?", answer: "out of scope" },
-      { round: 2, id: "Q-05", question: "Which tone?", answer: "free" },
+      { id: "Q-02", question: "Which colour?", answer: "free" },
+      { id: "Q-03", question: "Which font?", answer: "out of scope" },
+      { id: "Q-05", question: "Which tone?", answer: "free" },
     ];
-    const md = renderSpec(four, "b.md", "b.md", { round: 2, answers, unanswered: ["Q-04"] });
+    const md = renderSpec(four, "b.md", "b.md", { answers, unanswered: ["Q-04"] });
     assert.match(md, /Sources: .*\n\nOpen questions: Q-01\n\nLeft open: Q-02\n\nOut of scope: Q-03\n\nUnanswered: Q-04\n\n## Wishes/);
   });
 });

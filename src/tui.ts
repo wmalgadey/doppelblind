@@ -12,8 +12,8 @@ export interface Ui {
   banner(): void;
   step(label: string): Step;
   note(text: string): void;
-  /** Asks the user to pick one of `options` and resolves with the picked option. */
-  choose(question: string, options: string[]): Promise<string>;
+  /** Asks the user to pick one of `options`, showing `details` below the question, and resolves with the picked option. */
+  choose(question: string, options: string[], details?: string[]): Promise<string>;
 }
 
 const LOGO = [
@@ -75,11 +75,11 @@ export function terminalUi(stream: NodeJS.WriteStream = process.stderr, input: N
       stream.write(`    ${style("yellow", text)}\n`);
     },
 
-    async choose(question, options) {
+    async choose(question, options, details = []) {
       lines ??= createInterface({ input, terminal: false })[Symbol.asyncIterator]();
       const menu = options.map((o, i) => `${i + 1}) ${o}`).join("  ");
       while (true) {
-        stream.write(`  ${question}\n    ${menu}\n  > `);
+        stream.write(`\n  ${question}\n${details.map((d) => `    ${style("dim", d)}\n`).join("")}    ${menu}\n  > `);
         const next = await lines.next();
         if (next.done) throw new DoppelblindError(`No answer to "${question}": input ended.`);
         const answer = next.value.trim();
