@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, mkdtempSync, openSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { DoppelblindError } from "../errors.ts";
@@ -27,11 +27,6 @@ export interface AgentResponse {
 
 export type Agent = (request: AgentRequest) => Promise<AgentResponse>;
 
-/** Path of the Claude Code CLI; harness settings do not come from the project. */
-export function claudeBin(): string {
-  return process.env.DOPPELBLIND_CLAUDE_BIN || "claude";
-}
-
 /**
  * Runs Claude Code headless with no tools, no settings, no project files and the role's
  * own system prompt, in an empty working directory. The agent sees only `userMessage`.
@@ -40,6 +35,8 @@ export function claudeBin(): string {
  * completed with its exit when it ends.
  */
 export const runClaude: Agent = async (request) => {
+  // path of the Claude Code CLI; harness settings do not come from the project
+  const bin = process.env.DOPPELBLIND_CLAUDE_BIN || "claude";
   const workdir = mkdtempSync(path.join(tmpdir(), "doppelblind-agent-"));
   const args = [
     "--print",
@@ -55,7 +52,7 @@ export const runClaude: Agent = async (request) => {
   ];
   const { runDir } = request;
   const call: Record<string, unknown> = {
-    bin: claudeBin(),
+    bin,
     args,
     cwd: workdir,
     stdin: request.userMessage,
@@ -64,9 +61,10 @@ export const runClaude: Agent = async (request) => {
   };
   const archive = () => runDir && writeFileSync(path.join(runDir, CALL_FILE), JSON.stringify(call, null, 2) + "\n");
   archive();
-  const onStdout = runDir ? (chunk: string) => appendFileSync(path.join(runDir, TRACE_FILE), chunk) : undefined;
+  const trace = runDir ? openSync(path.join(runDir, TRACE_FILE), "a") : undefined;
+  const onStdout = trace === undefined ? undefined : (chunk: string) => writeSync(trace, chunk);
   try {
-    const { stdout, stderr, code } = await run(claudeBin(), args, workdir, request.userMessage, request.timeoutMs, onStdout);
+    const { stdout, stderr, code } = await run(bin, args, workdir, request.userMessage, request.timeoutMs, onStdout);
     Object.assign(call, { endedAt: new Date().toISOString(), exitCode: code, stderr });
     return parseResponse(stdout, stderr, code);
   } catch (err) {
@@ -74,6 +72,7 @@ export const runClaude: Agent = async (request) => {
     call.error = err instanceof Error ? err.message : String(err);
     throw err;
   } finally {
+    if (trace !== undefined) closeSync(trace);
     archive();
     rmSync(workdir, { recursive: true, force: true });
   }
