@@ -31,15 +31,15 @@ Agents run through an agent CLI in headless mode. I use a Claude subscription, n
 ## 3. Core loop
 
 1. I write a brief.
-2. The spec agent writes binding criteria, each with an ID and a cited source, separate from wishes, and lists every decision that neither the brief nor a source makes as an open question without a suggested answer.
+2. The spec agent writes binding criteria, each with an ID, a cited source and how it is proven — by an acceptance test, or by my review where no test can decide it — separate from wishes. What another outcome delivers, it marks as out of scope and cites that outcome. Every decision that neither the brief nor a source makes, it lists as an open question without a suggested answer.
 3. I answer the open questions: with my own text, with `free` to leave a decision open on purpose, or with `out of scope` to keep it out of this change.
-4. The orchestrator records my answers and lists every open question I left without one, with the criteria it concerns. For each, I choose `free`, `out of scope`, or to stop and answer it later.
-5. I decide whether another clarify round runs. If it does, the spec agent runs again from scratch on the brief, the sources and every answer so far, never on its earlier spec and never told which round it is, and the loop continues at step 3.
-6. If it does not, the spec is final. If an answer has not reached the spec agent yet, it runs once more, and its open questions are recorded as unanswered. Every open question is then left open, out of scope or unanswered.
-7. The test author, who never sees implementation code or plan, writes acceptance tests per criterion and lists every assumption it had to make.
+4. For each, I choose free, out of scope, to stop and answer it later, or to finish the spec step, which records it and every unanswered question as `unanswered`
+5. I decide whether another spec-create run starts. If it does, the spec agent runs again from scratch on the brief, the sources and every answer so far, never on its earlier spec and never told how many runs came before, and the loop continues at step 3.
+6. If it does not, the spec is final. If an answer has not reached the spec agent yet, it runs once more, and its open questions are answered as `unanswered`. Every open question is then left open, out of scope or unanswered.
+7. The test author, who never sees implementation code or plan, writes acceptance tests for every criterion proven by test and lists every assumption it had to make. A criterion proven by review gets no acceptance test; I check it before the merge.
 8. If the risk matrix or the assumptions call for it, I approve before implementation. The acceptance tests are frozen.
 9. The implementer works until the acceptance tests are green or reports a divergence; the verifier, who never sees the implementer's report, returns findings until there are none or a limit is reached.
-10. If the change carries technical risk, I approve the merge; otherwise it merges automatically once all gates are green.
+10. If the change carries technical risk or a criterion is proven by review, I approve the merge; otherwise it merges automatically once all gates are green.
 11. I see what each run did, where it diverged, what it cost and how it ended.
 
 ## 4. Non-goals
@@ -59,7 +59,7 @@ Agents run through an agent CLI in headless mode. I use a Claude subscription, n
 3. The orchestrator is deterministic code. It holds the state, starts exactly one role per step in a fresh context, validates structured output against its schema — invalid output is a failure, never an empty list — and decides whether an approval is needed: one yes suffices, an uncertain answer counts as yes. The implementer never classifies risk.
 4. Every agent run is bounded by time and cost, and every loop that runs without me is bounded by rounds. A loop that starts a round only after I say so, such as the spec loop, is bounded by me. I can set the time and cost limits when I start a run. At a limit, a human decides; nothing is approved automatically by waiting.
 5. Sources are written only by people.
-6. Every run records its state, its logs and the input and output of every role in the project's .doppelblind folder, for later analysis.
+6. Every run records its state, its logs and the input and output of every role in the project's .doppelblind folder, for later analysis. That record is never evidence that the orchestrator itself behaved correctly.
 
 Every invariant holds for a role from the outcome that introduces it. §9 describes how Doppelblind's own code was written before that, not how a run works.
 
