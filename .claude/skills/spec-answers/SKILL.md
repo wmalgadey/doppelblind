@@ -1,55 +1,51 @@
 ---
-name: spec-answers
-description: Record the user's answers to the open questions in a specs/<folder>/spec.md. Use when the user wants to answer, or go through, the open questions of a spec.
+name: spec-answer
+description: Walk through the open questions of a spec.md and write the user's answers into its Answer fields. Use when the user wants to answer the open questions of a spec.
 ---
 
-# Answer open questions
+# Answer the open questions of a spec
 
-Each open question in a `spec.md` has an empty `**Answer:**` line. The next round of the spec agent reads every answer that is not empty and treats it as a binding source: it works the answer into the criteria and cites it. The user makes the decision; you record it.
+Answers are binding sources: the spec agent turns every answer into criteria, including examples and side remarks. You ask; the user decides. You never suggest, complete or rephrase an answer.
 
 ## Which spec
 
-Use the spec the user names. If they name none and the spec.md open in the editor has open questions, use that one. Otherwise list the specs under `specs/` that have unanswered questions and ask which one.
+If the user names no spec, list the folders under `specs/` that have a spec.md with at least one empty **Answer:** field, and ask which one.
 
-## Write only what the user said
+## Order
 
-Every answer comes from what the user said in this conversation, in their words. Do not answer a question from your own reasoning, from the code or from other documents, and do not add details, reasons or alternatives the user did not give.
+Go through the open questions that have an empty **Answer:** field. Ask a question only after every question in its "Depends on" line has been asked.
 
-If the user asks for your view, give it in the conversation and mark it as yours; record only what they then decide. If an answer is unclear, or leaves part of the question undecided, ask, one question at a time.
+At the start, count the open questions in spec.md and how many of them already have an answer. The position of a question is that number of answered questions plus one for each question asked in this session so far; the total is the number of open questions. Count again from the file when the skill is run again.
 
-If the user answers with a technical solution, ask what it should achieve, and suggest recording that. A spec cites only what binds the spec, not how it is built. The user decides what is recorded.
+## Each question
 
-## How to ask
+Ask with the AskUserQuestion tool, one question per call:
 
-- Go through the questions whose answer is empty, in their order. Skip questions that already have an answer, unless the user asks to change one.
-- Ask a question before the questions that list it under `_Depends on:_`.
-- Ask one question at a time. Show its ID, its text and its context, as they appear in the spec.
-- The user may skip a question; its answer stays empty, and the spec agent asks it again in the next round.
-- The user may leave a decision open on purpose. Then the answer starts with the word `free`, optionally followed by the user's reason.
+- `header`: the question ID, e.g. `Q-03`.
+- `question`: starts with the position, e.g. `Question 4 of 21:`, then the question's text exactly as in spec.md, then its context line, then the IDs of the criteria whose "Open questions" line lists this question. If none does, say so.
+- `options`, exactly these two, in this order:
+  - label `free`, description `Left open on purpose; nobody tests it.`
+  - label `out of scope`, description `Not part of this change.`
 
-## Answer format
+The tool adds a free text field itself. Add no other options, and never an option that answers the question.
 
-The answer goes in the lines between `**Answer:**` and the next heading:
+## Free text answers
 
-```
-### Q-07
+Take the user's text exactly as written. Do not shorten, translate, correct or complete it.
 
-<question>
+Before you accept it, check two things and tell the user only what you find, in one sentence each:
 
-_Context: <context>_
+- It contains an example ("e.g.", "for example", "such as", "z. B."). Say that the spec agent may make the example binding, and ask whether to keep the text as it is.
+- It does not answer the question that was asked. Say which question it seems to answer, and ask whether to keep it here.
 
-**Answer:**
+If the user keeps the text, keep it unchanged.
 
-<the user's answer>
-```
+## Writing
 
-- Change nothing else in the spec.md: not the question, the context, the criteria or other answers.
-- An answer must not contain a Markdown heading: a line starting with `## ` or `### Q-` ends the answer for the reader in `src/spec/answers.ts`. Use a list or plain lines instead.
+Write each answer into spec.md as soon as the user has given it, before you ask the next question. Do not collect answers.
 
-## When to write
+Write it on the line after its **Answer:** field, followed by an empty line. Change nothing else in spec.md: no criterion, no question, no heading. Read spec.md again before each write, so that you never overwrite a change made in between.
 
-Write each answer as soon as the user has given it, before you ask the next question. Do not ask for confirmation first; the user reads the answers in the spec.md.
+## Stopping
 
-## At the end
-
-Name the questions that are still unanswered. Tell the user that `doppelblind spec <brief>` with the brief linked at the top of the spec starts the next round, which writes the spec afresh from the brief, the sources and every answer.
+The user may stop at any time: by dismissing a question, or by typing `stop` as the answer. Then write nothing for that question and end. Answers already written stay. Running the skill again continues with the first question whose **Answer:** field is still empty.
