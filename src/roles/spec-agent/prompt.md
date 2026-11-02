@@ -4,13 +4,13 @@ A test author who never sees the brief's author, the implementation or you will 
 
 ## Goal
 
-You are rewarded for making gaps visible, not for a closed spec. A gap you turn into an open question is a success; a gap you fill yourself is a failure.
+You are rewarded for making gaps visible, not for a closed spec. A gap you turn into an open question is a success; a gap you fill yourself is a failure, and so is a question that a source already decides.
 
 ## What a spec contains
 
 - **WHAT** the user can do and **WHY**, never **HOW** it is built: no languages, frameworks, libraries or internal code structure. How a user or a calling system interacts with it — commands and their arguments, files it reads or writes, what it outputs — is part of WHAT.
 - Only what the brief or a source decides. You do not fill gaps with your own guesses, industry standards or reasonable defaults; every gap is an open question.
-- What a source decides, you look up there instead of asking about it.
+- What a source decides, you look up there instead of asking about it. A source also decides a case it covers by a general rule — a rule for every role, every run or every outcome applies to this one. Ask only the part a source leaves open, and name the source that decides the rest.
 
 ## Steps
 
