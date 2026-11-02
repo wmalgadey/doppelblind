@@ -5,6 +5,8 @@ import { describe, test } from "vitest";
 import type { Agent, AgentRequest } from "../src/agent/claude.ts";
 import { DoppelblindError } from "../src/errors.ts";
 import { runSpecFlow } from "../src/flow/spec-flow.ts";
+import { fillAnswers } from "../src/spec/answers.ts";
+import { readState } from "../src/spec/state.ts";
 import { BRIEF, makeProject, recordingUi, sampleSpec } from "./helpers.ts";
 
 const CONTRACT = JSON.stringify({ sources: ["docs/product.md", "docs/decisions.md"], specs: "specs" });
@@ -15,6 +17,11 @@ function fakeAgent(output: unknown, calls: AgentRequest[] = []): Agent {
     if (request.runDir) writeFileSync(path.join(request.runDir, "trace.jsonl"), JSON.stringify({ type: "result", structured_output: output }) + "\n");
     return { output, costUsd: 0.1, durationMs: 3000 };
   };
+}
+
+/** Writes `text` into the Answer field of question `id` in spec.md. */
+function answer(file: string, id: string, text: string) {
+  writeFileSync(file, fillAnswers(readFileSync(file, "utf8"), [{ id, answer: text }]));
 }
 
 function project() {
@@ -84,7 +91,7 @@ describe("spec-flow", () => {
     writeFileSync(first.specFile, "# Something else entirely\n");
     const second = await runSpecFlow({ ...opts, agent: fakeAgent(sampleSpec({ short_name: "other-name" })) });
     assert.equal(second.specFile, first.specFile);
-    const state = JSON.parse(readFileSync(path.join(root, ".doppelblind/specs.json"), "utf8"));
+    const state = readState(root);
     assert.deepEqual(Object.keys(state), ["docs/briefs/greeting.md"]);
     assert.equal(state["docs/briefs/greeting.md"].folder, "specs/001-greet-everyone");
     // ready or open is computed from the spec, never stored
@@ -94,11 +101,10 @@ describe("spec-flow", () => {
   test("answers accumulate across spec-create runs with their question's text", async () => {
     const root = project();
     const opts = { cwd: root, brief: "docs/briefs/greeting.md", ui: recordingUi() };
-    const answer = (file: string, text: string) => writeFileSync(file, readFileSync(file, "utf8").replace("**Answer:**\n", `**Answer:**\n\n${text}\n`));
     const first = await runSpecFlow({ ...opts, agent: fakeAgent(sampleSpec()) });
-    answer(first.specFile, "Hello.");
+    answer(first.specFile, "Q-01", "Hello.");
     await runSpecFlow({ ...opts, agent: fakeAgent(sampleSpec({ open_questions: [{ id: "Q-01", question: "Which colour?", concerns: ["AC-001"] }] })) });
-    answer(first.specFile, "free the user picks it");
+    answer(first.specFile, "Q-02", "free the user picks it");
 
     const calls: AgentRequest[] = [];
     await runSpecFlow({ ...opts, agent: fakeAgent(sampleSpec({ open_questions: [] }), calls) });
@@ -259,15 +265,8 @@ describe("spec-flow: continuing a feature", () => {
     ],
   });
 
-  /** Writes `text` into the Answer field of question `id` in spec.md. */
-  function answer(file: string, id: string, text: string) {
-    const md = readFileSync(file, "utf8");
-    const at = md.indexOf("**Answer:**\n", md.indexOf(`### ${id}\n`));
-    writeFileSync(file, md.slice(0, at) + `**Answer:**\n\n${text}\n` + md.slice(at + "**Answer:**\n".length));
-  }
-
   function state(root: string) {
-    return JSON.parse(readFileSync(path.join(root, ".doppelblind/specs.json"), "utf8"))[BRIEF_PATH];
+    return readState(root)[BRIEF_PATH];
   }
 
   function answersMd(root: string) {
