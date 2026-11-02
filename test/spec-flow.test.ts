@@ -56,7 +56,7 @@ describe("spec-flow", () => {
     const revision = sampleSpec({
       short_name: "other-name",
       criteria: [{ ...sampleSpec().criteria[0], sources: [{ path: "specs/001-greet-everyone/spec.md", anchor: "Hello and welcome." }] }],
-      open_questions: [{ id: "Q-02", question: "In which language is the greeting?" }],
+      open_questions: [{ id: "Q-02", question: "In which language is the greeting?", concerns: [] }],
     });
     const ui = recordingUi();
     const second = await runSpecFlow({ cwd: root, brief: "docs/briefs/greeting.md", ui, agent: fakeAgent(revision, calls) });

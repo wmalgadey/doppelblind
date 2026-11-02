@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "additionalProperties": false,
-  "required": ["title", "short_name", "criteria", "wishes", "open_questions"],
+  "required": ["title", "short_name", "criteria", "wishes", "open_questions", "left_open"],
   "properties": {
     "title": {
       "type": "string",
@@ -53,17 +53,27 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "question"],
+        "required": ["id", "question", "concerns"],
         "properties": {
           "id": { "type": "string", "pattern": "^Q-[0-9]{2,}$" },
           "question": { "type": "string", "minLength": 1 },
-          "context": { "type": "string" },
+          "concerns": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^AC-[0-9]{3,}$" },
+            "description": "IDs of the criteria whose behaviour the answer would change; may be empty."
+          },
+          "context": { "type": "string", "description": "The step of the brief the question is about, in one sentence." },
           "depends_on": {
             "type": "array",
             "items": { "type": "string", "pattern": "^Q-[0-9]{2,}$" }
           }
         }
       }
+    },
+    "left_open": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Decisions the user left open on purpose, one each."
     }
   }
 }

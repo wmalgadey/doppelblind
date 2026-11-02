@@ -8,8 +8,8 @@ describe("answers", () => {
   test("readAnswers reads answered questions without their context lines", () => {
     const spec = sampleSpec({
       open_questions: [
-        { id: "Q-01", question: "Which words?", context: "AC-001" },
-        { id: "Q-02", question: "Which colour?", depends_on: ["Q-01"] },
+        { id: "Q-01", question: "Which words?", concerns: ["AC-001"], context: "AC-001" },
+        { id: "Q-02", question: "Which colour?", concerns: [], depends_on: ["Q-01"] },
       ],
     });
     const md = renderSpec(spec, "b.md", "b.md")

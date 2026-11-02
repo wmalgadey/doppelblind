@@ -19,11 +19,17 @@ export function renderSpec(spec: SpecOutput, briefPath: string, briefLink: strin
       `Sources: ${c.sources.map((s) => `\`${s.path}\` › ${s.anchor}`).join("; ")}`,
       "",
     );
+    const questions = spec.open_questions.filter((q) => q.concerns.includes(c.id)).map((q) => q.id);
+    if (questions.length > 0) lines.push(`Open questions: ${questions.join(", ")}`, "");
   }
 
   lines.push("## Wishes", "");
   if (spec.wishes.length === 0) lines.push("None.", "");
   else lines.push(...spec.wishes.map((w) => `- ${w}`), "");
+
+  lines.push("## Left open", "");
+  if (spec.left_open.length === 0) lines.push("None.", "");
+  else lines.push(...spec.left_open.map((d) => `- ${d}`), "");
 
   lines.push("## Open questions", "");
   if (spec.open_questions.length === 0) lines.push("None.", "");

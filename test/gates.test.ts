@@ -26,8 +26,11 @@ describe("gates", () => {
       sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], sources: [] }] }),
       sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], id: "1" }] }),
       sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], id: "AC-01" }] }),
-      sampleSpec({ open_questions: [{ id: "Q-01", question: "?", depends_on: ["2"] }] }),
-      sampleSpec({ open_questions: [{ id: "Q1", question: "?" }] }),
+      sampleSpec({ open_questions: [{ id: "Q-01", question: "?", concerns: [], depends_on: ["2"] }] }),
+      sampleSpec({ open_questions: [{ id: "Q1", question: "?", concerns: [] }] }),
+      sampleSpec({ open_questions: [{ id: "Q-01", question: "?", concerns: ["1"] }] }),
+      sampleSpec({ open_questions: [{ id: "Q-01", question: "?" } as never] }),
+      { ...sampleSpec(), left_open: undefined },
       sampleSpec({ short_name: "Not A Slug" }),
       sampleSpec({ short_name: "single" }),
     ]) {
@@ -69,11 +72,16 @@ describe("gates", () => {
   });
 
   test("a question may depend only on another question of the spec", () => {
-    const q = (id: string, depends_on: string[]) => ({ id, question: "?", depends_on });
+    const q = (id: string, depends_on: string[]) => ({ id, question: "?", concerns: [], depends_on });
     const spec = sampleSpec({ open_questions: [q("Q-01", ["Q-02", "Q-07"]), q("Q-02", ["Q-02"]), q("Q-03", ["Q-05"])] });
     assert.deepEqual(checkSpec(spec, sources, ["Q-05"]), [
       "Open question Q-01 depends on Q-07, which is not a question of this spec.",
       "Open question Q-02 depends on itself.",
     ]);
+  });
+
+  test("a question may concern only a criterion of the spec", () => {
+    const spec = sampleSpec({ open_questions: [{ id: "Q-01", question: "?", concerns: ["AC-001", "AC-004"] }] });
+    assert.deepEqual(checkSpec(spec, sources), ["Open question Q-01 concerns AC-004, which is not a criterion of this spec."]);
   });
 });

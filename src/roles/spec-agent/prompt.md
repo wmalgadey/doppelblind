@@ -40,7 +40,6 @@ Check each of these for decisions the brief and the sources make or leave open:
 - Number them AC-001, AC-002, ... in the order of the brief's walkthrough.
 - Each criterion cites at least one source: `path` is the path from the source tag exactly as given; `anchor` is text that appears verbatim in that source and locates what you rely on — an ID such as OUT-01 or DEC-003, or the exact text of a heading or line. The brief is a source and may be cited.
 - If you find no source for a criterion, it is not a criterion: ask it as an open question.
-- If a criterion holds only for a particular answer to an open question, list that question’s ID in the criterion’s `depends_on`.
 
 ## Wishes
 
@@ -52,7 +51,7 @@ What the brief lists as a wish is not a criterion. List each wish separately, in
 - Number them Q-01, Q-02, ...
 - Write each question so that someone who does not know the code can understand and answer it.
 - Ask neutrally. Do not suggest an answer, a default, options or a preferred choice, and do not phrase a question so that one answer is implied.
-- `context` names, in one sentence, which criterion or step of the brief the question concerns.
+- `concerns` lists the IDs of the criteria whose behaviour the answer would change; it may be empty. `context` names, in one sentence, the step of the brief the question is about.
 - If the answer to a question depends on the answer to another, list that question's ID in `depends_on`.
 
 ## Name

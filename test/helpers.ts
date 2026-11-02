@@ -60,7 +60,8 @@ export function sampleSpec(overrides: Partial<SpecOutput> = {}): SpecOutput {
       },
     ],
     wishes: ["A colourful greeting."],
-    open_questions: [{ id: "Q-01", question: "Which words does the greeting use?", context: "AC-001" }],
+    open_questions: [{ id: "Q-01", question: "Which words does the greeting use?", concerns: ["AC-001"], context: "I run the greeter." }],
+    left_open: [],
     ...overrides,
   };
 }

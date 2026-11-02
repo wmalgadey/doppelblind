@@ -19,6 +19,9 @@ export interface Criterion {
 export interface OpenQuestion {
   id: string;
   question: string;
+  /** IDs of the criteria whose behaviour the answer would change. */
+  concerns: string[];
+  /** The step of the brief the question is about. */
   context?: string;
   /** IDs of the questions whose answers this one depends on. */
   depends_on?: string[];
@@ -31,6 +34,8 @@ export interface SpecOutput {
   criteria: Criterion[];
   wishes: string[];
   open_questions: OpenQuestion[];
+  /** Decisions the user left open on purpose. */
+  left_open: string[];
 }
 
 const dir = import.meta.dirname;
