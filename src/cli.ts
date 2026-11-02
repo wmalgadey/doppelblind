@@ -2,7 +2,7 @@
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { DoppelblindError } from "./errors.ts";
-import { runSpecFlow } from "./flow/spec-flow.ts";
+import { MAX_ROUNDS, runSpecFlow } from "./flow/spec-flow.ts";
 import { terminalUi } from "./tui.ts";
 
 const USAGE = `Usage: doppelblind <command> <brief>
@@ -54,7 +54,12 @@ async function main(argv: string[]): Promise<number> {
   const specFile = path.relative(process.cwd(), result.specFile);
   process.stderr.write(
     `\n  ${result.criteria} criteria, ${result.openQuestions} open questions.\n` +
-      (result.openQuestions > 0 ? `  Answer the open questions in ${specFile}\n` : "") +
+      `  Status: ${result.status} (round ${result.round} of ${MAX_ROUNDS})\n` +
+      (result.status === "limit reached"
+        ? "  The spec is not ready and the brief has no rounds left; no further round starts.\n"
+        : result.openQuestions > 0
+          ? `  Answer the open questions in ${specFile}, then run again.\n`
+          : "") +
       "  The flow ends here: no further role exists yet.\n",
   );
   process.stdout.write(`${specFile}\n`);

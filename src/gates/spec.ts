@@ -3,19 +3,15 @@ import type { Source } from "../sources.ts";
 
 /**
  * Deterministic checks on a spec that its schema cannot express:
- * IDs are unique, no open question reuses the ID of an answered one, depends on an unknown question
- * or concerns an unknown criterion,
+ * IDs are unique, no open question depends on an unknown question or concerns an unknown criterion,
  * and every citation names an allowed source and an anchor present in it.
  * Returns one message per problem; an empty list means the spec passes.
  */
-export function checkSpec(spec: SpecOutput, sources: Source[], answeredIds: string[] = []): string[] {
+export function checkSpec(spec: SpecOutput, sources: Source[]): string[] {
   const problems: string[] = [];
   problems.push(...duplicates("criterion", spec.criteria.map((c) => c.id)));
   problems.push(...duplicates("open question", spec.open_questions.map((q) => q.id)));
-  for (const q of spec.open_questions) {
-    if (answeredIds.includes(q.id)) problems.push(`Open question ${q.id} reuses the ID of an answered question.`);
-  }
-  const questionIds = [...spec.open_questions.map((q) => q.id), ...answeredIds];
+  const questionIds = spec.open_questions.map((q) => q.id);
   const criterionIds = spec.criteria.map((c) => c.id);
   for (const q of spec.open_questions) {
     for (const id of q.depends_on ?? []) {

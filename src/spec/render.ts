@@ -1,11 +1,7 @@
 import type { SpecOutput } from "../roles/spec-agent/index.ts";
-import { renderAnswers, type AnsweredQuestion } from "./answers.ts";
 
-/**
- * Renders a spec as Markdown. `briefLink` is the brief's path relative to the spec file.
- * `answered` are the questions answered in earlier runs; they are kept as they are.
- */
-export function renderSpec(spec: SpecOutput, briefPath: string, briefLink: string, answered: AnsweredQuestion[] = []): string {
+/** Renders a spec as Markdown. `briefLink` is the brief's path relative to the spec file. */
+export function renderSpec(spec: SpecOutput, briefPath: string, briefLink: string): string {
   const lines = [`# ${spec.title}`, "", `Brief: [${briefPath}](${briefLink})`, "", "## Criteria", ""];
 
   for (const c of spec.criteria) {
@@ -39,8 +35,6 @@ export function renderSpec(spec: SpecOutput, briefPath: string, briefLink: strin
     if (q.depends_on?.length) lines.push(`_Depends on: ${q.depends_on.join(", ")}_`, "");
     lines.push("**Answer:**", "", "");
   }
-
-  if (answered.length > 0) lines.push("## Answered questions", "", ...renderAnswers(answered));
 
   return lines.join("\n").trimEnd() + "\n";
 }

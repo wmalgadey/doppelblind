@@ -73,8 +73,8 @@ describe("gates", () => {
 
   test("a question may depend only on another question of the spec", () => {
     const q = (id: string, depends_on: string[]) => ({ id, question: "?", concerns: [], depends_on });
-    const spec = sampleSpec({ open_questions: [q("Q-01", ["Q-02", "Q-07"]), q("Q-02", ["Q-02"]), q("Q-03", ["Q-05"])] });
-    assert.deepEqual(checkSpec(spec, sources, ["Q-05"]), [
+    const spec = sampleSpec({ open_questions: [q("Q-01", ["Q-02", "Q-07"]), q("Q-02", ["Q-02"])] });
+    assert.deepEqual(checkSpec(spec, sources), [
       "Open question Q-01 depends on Q-07, which is not a question of this spec.",
       "Open question Q-02 depends on itself.",
     ]);

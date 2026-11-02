@@ -1,14 +1,22 @@
-/** An open question of an earlier spec that the user has answered in spec.md. */
+/** An open question of a spec that the user has answered in spec.md. */
 export interface AnsweredQuestion {
   id: string;
   question: string;
   answer: string;
 }
 
+/** An answer kept across rounds; its ID is only meaningful within the round it was asked in. */
+export interface Answer extends AnsweredQuestion {
+  round: number;
+}
+
+export const ANSWERS_FILE = "answers.md";
+
 const QUESTION_HEADING = /^### (Q-\d{2,})[ \t]*$/m;
+const ROUND_HEADING = /^## Round (\d+)[ \t]*$/m;
 const ANSWER_MARK = "**Answer:**";
 
-/** Reads every question in a rendered spec.md whose answer is not empty, open or answered in an earlier run. */
+/** Reads every question in a rendered spec.md whose answer is not empty or whitespace only. */
 export function readAnswers(markdown: string): AnsweredQuestion[] {
   const parts = markdown.split(QUESTION_HEADING);
   const answered: AnsweredQuestion[] = [];
@@ -28,4 +36,24 @@ export function readAnswers(markdown: string): AnsweredQuestion[] {
 /** Renders answered questions in the layout `readAnswers` reads back. */
 export function renderAnswers(answered: AnsweredQuestion[]): string[] {
   return answered.flatMap((q) => [`### ${q.id}`, "", q.question, "", ANSWER_MARK, "", q.answer, ""]);
+}
+
+/** Reads the answers of every round from an answers.md that `renderAnswerLog` wrote. */
+export function readAnswerLog(markdown: string): Answer[] {
+  const parts = markdown.split(ROUND_HEADING);
+  const answers: Answer[] = [];
+  for (let i = 1; i < parts.length; i += 2) {
+    const round = Number(parts[i]);
+    answers.push(...readAnswers(parts[i + 1]).map((a) => ({ ...a, round })));
+  }
+  return answers;
+}
+
+/** Renders the answers of every round, grouped by the round whose spec asked them. */
+export function renderAnswerLog(answers: Answer[]): string {
+  const lines = ["# Answers", ""];
+  for (const round of [...new Set(answers.map((a) => a.round))].sort((a, b) => a - b)) {
+    lines.push(`## Round ${round}`, "", ...renderAnswers(answers.filter((a) => a.round === round)));
+  }
+  return lines.join("\n").trimEnd() + "\n";
 }

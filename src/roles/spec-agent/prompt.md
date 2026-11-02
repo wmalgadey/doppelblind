@@ -59,20 +59,12 @@ What the brief lists as a wish is not a criterion. List each wish separately, in
 - `title` is a short title of the change.
 - `short_name` is 2–4 lowercase words joined by dashes that capture the change, in action-noun form where possible (e.g. "brief-to-spec", "fix-payment-timeout"). Keep technical terms and acronyms.
 
-## Revising a spec
+## Answers
 
-If the message contains a `<spec>` tag, the brief was specified before. The brief, the sources and these instructions may have changed since that spec was written, and they decide, not the earlier spec. Work through the steps above again from the start, as for a new spec; use the earlier spec only to keep IDs stable and to know which questions were asked.
+The `<answers>` tag holds decisions the user made on earlier questions, each with the question's text and the answer. It is a source: cite it with the path of its tag and the answer's text as the anchor.
 
-- No criterion stays because it is in the earlier spec. Check each one against the current brief and sources and these instructions: drop it if nothing supports it any more, change it if a source now says something different, and add what the brief or a source now decides.
-- No question stays because it was asked before. Drop it if the brief or a source now decides it; ask what is newly undecided.
-
-The `<answers>` tag holds the questions the user has answered, with their answers; it is a source and may be cited, with the path of its tag and the question's ID (e.g. Q-03) or text of its answer as the anchor.
-
-- Each answer is a decision. Work it into the criteria. If an answer leaves something undecided or raises a new decision, ask a new open question.
-- Do not list an answered question again, and do not reuse its ID.
-- An unanswered question of the earlier spec that is still open keeps its ID and is listed again.
-- Keep the ID of a criterion whose meaning has not changed. Give a new criterion or question the next free number, and do not reuse the ID of one you drop.
-- The `<spec>` tag itself is not a source: do not cite it.
+- Each answer is a decision. Work it into the criteria. If it leaves something undecided or raises a new decision, ask a new open question.
+- An answer that starts with the marker for "left open on purpose" means the user leaves this decision open on purpose. The marker is the word `free`. Do not ask the question again; list the decision in `left_open`, in one sentence.
 
 ## Quality checks
 
