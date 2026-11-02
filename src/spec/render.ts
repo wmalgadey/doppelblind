@@ -22,7 +22,7 @@ const NO_RECORD: QuestionRecord = { answers: [], unanswered: [] };
  * Sorts questions into the sections of spec.md: a question of the spec is open until it has an answer
  * or is recorded as unanswered; every answer `free` or `out of scope`, to any spec-create run, is listed as such.
  */
-export function questionSections(spec: SpecOutput, record: QuestionRecord = NO_RECORD): QuestionSections {
+export function questionSections(spec: SpecOutput, record: QuestionRecord): QuestionSections {
   const answered = new Set(record.answers.map((a) => a.id));
   return {
     open: spec.open_questions.filter((q) => !answered.has(q.id) && !record.unanswered.includes(q.id)),
@@ -35,15 +35,8 @@ export function questionSections(spec: SpecOutput, record: QuestionRecord = NO_R
 /** Renders a spec as Markdown. `briefLink` is the brief's path relative to the spec file. */
 export function renderSpec(spec: SpecOutput, briefPath: string, briefLink: string, record: QuestionRecord = NO_RECORD): string {
   const sections = questionSections(spec, record);
-  // only the spec's own questions concern its criteria
-  const own = new Set(spec.open_questions.map((q) => q.id));
-  const current = (answers: Answer[]) => answers.filter((a) => own.has(a.id)).map((a) => a.id);
-  const byCriterion: [string, string[]][] = [
-    ["Open questions", sections.open.map((q) => q.id)],
-    ["Left open", current(sections.leftOpen)],
-    ["Out of scope", current(sections.outOfScope)],
-    ["Unanswered", sections.unanswered.map((q) => q.id)],
-  ];
+  const listed = [["Left open", sections.leftOpen], ["Out of scope", sections.outOfScope], ["Unanswered", sections.unanswered]] as const;
+  const byCriterion = [["Open questions", sections.open] as const, ...listed];
 
   const lines = [`# ${spec.title}`, "", `Brief: [${briefPath}](${briefLink})`, "", "## Criteria", ""];
 
@@ -58,8 +51,9 @@ export function renderSpec(spec: SpecOutput, briefPath: string, briefLink: strin
       `Sources: ${c.sources.map((s) => `\`${s.path}\` › ${s.anchor}`).join("; ")}`,
       "",
     );
-    for (const [section, ids] of byCriterion) {
-      const questions = spec.open_questions.filter((q) => q.concerns.includes(c.id) && ids.includes(q.id)).map((q) => q.id);
+    for (const [section, listedHere] of byCriterion) {
+      const ids = new Set(listedHere.map((q) => q.id));
+      const questions = spec.open_questions.filter((q) => q.concerns.includes(c.id) && ids.has(q.id)).map((q) => q.id);
       if (questions.length > 0) lines.push(`${section}: ${questions.join(", ")}`, "");
     }
   }
@@ -68,15 +62,11 @@ export function renderSpec(spec: SpecOutput, briefPath: string, briefLink: strin
   if (spec.wishes.length === 0) lines.push("None.", "");
   else lines.push(...spec.wishes.map((w) => `- ${w}`), "");
 
-  for (const [section, answers] of [["Left open", sections.leftOpen], ["Out of scope", sections.outOfScope]] as const) {
+  for (const [section, questions] of listed) {
     lines.push(`## ${section}`, "");
-    if (answers.length === 0) lines.push("None.", "");
-    else lines.push(...answers.map((a) => `- ${a.id}: ${a.question}`), "");
+    if (questions.length === 0) lines.push("None.", "");
+    else lines.push(...questions.map((q) => `- ${q.id}: ${q.question}`), "");
   }
-
-  lines.push("## Unanswered", "");
-  if (sections.unanswered.length === 0) lines.push("None.", "");
-  else lines.push(...sections.unanswered.map((q) => `- ${q.id}: ${q.question}`), "");
 
   lines.push("## Open questions", "");
   if (sections.open.length === 0) lines.push("None.", "");
