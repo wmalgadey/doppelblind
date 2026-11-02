@@ -8,7 +8,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 80,
-      "description": "Short title of the change, in the language of the brief."
+      "description": "Short title of the change, in English."
     },
     "short_name": {
       "type": "string",

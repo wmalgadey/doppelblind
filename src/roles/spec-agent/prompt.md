@@ -52,4 +52,4 @@ Before you answer, check and fix:
 
 ## Language
 
-Write title, criteria, wishes and questions in the language of the brief. `short_name` may be in the brief's language or English.
+Write title, criteria, wishes, questions and `short_name` in English, whatever the language of the brief.

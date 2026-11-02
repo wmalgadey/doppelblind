@@ -35,3 +35,12 @@ Date: 2026-11-02
 The project uses TypeScript 7.
 
 Why: Type checking stays fast when the build grows large.
+
+## DEC-005: Agents write their output in English
+
+Status: accepted
+Date: 2026-11-02
+
+All agent output is in English, regardless of the brief's language. The fixed labels in spec.md stay English as well.
+
+Why: Otherwise a spec mixes German and English.
