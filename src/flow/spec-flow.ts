@@ -51,15 +51,19 @@ export async function runSpecFlow(options: SpecFlowOptions): Promise<SpecFlowRes
   const previous = existing === undefined ? undefined : readPrevious(contract.root, existing);
   if (previous) ui.note(`revising ${previous.spec.path} (${previous.answered.length} answered questions)`);
 
-  const response = await step(ui, "Spec agent is writing the spec", () =>
-    agent({
-      systemPrompt: specAgent.systemPrompt,
-      userMessage: specAgent.buildUserMessage(sources.brief, sources.all, previous),
-      schema: specAgent.schema,
-      timeoutMs: options.timeoutMs ?? 15 * 60_000,
-      maxBudgetUsd: options.maxBudgetUsd ?? 5,
-    }), describeCost);
-  const log = writeRunLog(contract.root, response.raw);
+  const request = {
+    systemPrompt: specAgent.systemPrompt,
+    userMessage: specAgent.buildUserMessage(sources.brief, sources.all, previous),
+    schema: specAgent.schema,
+    timeoutMs: options.timeoutMs ?? 15 * 60_000,
+    maxBudgetUsd: options.maxBudgetUsd ?? 5,
+  };
+  const trace = startRunLog(contract.root, request.systemPrompt, request.userMessage);
+  const log = toProjectPath(contract.root, trace);
+  ui.note(`trace: ${log}`);
+
+  const response = await step(ui, "Spec agent is writing the spec",
+    () => withLog(log, () => agent({ ...request, trace })), describeCost);
 
   const spec = await step(ui, "Validating output against schema",
     () => withLog(log, () => validateOutput<specAgent.SpecOutput>(specAgent.schema, response.output)));
@@ -108,20 +112,25 @@ function describeCost(response: { costUsd?: number; durationMs?: number }): stri
   return parts.join(", ");
 }
 
-/** Keeps the agent's raw response in the project's run state, so a failed run can be inspected. */
-function writeRunLog(root: string, raw: string): string {
-  const dir = path.join(root, ".doppelblind", "runs");
+/**
+ * Starts a run folder in the project's run state with the agent's prompt and input,
+ * and returns the trace file the agent's events are written to, so any run can be inspected.
+ */
+function startRunLog(root: string, systemPrompt: string, userMessage: string): string {
+  const dir = path.join(root, ".doppelblind", "runs", `${new Date().toISOString().replace(/[:.]/g, "-")}-spec-agent`);
   mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, `${new Date().toISOString().replace(/[:.]/g, "-")}-spec-agent.json`);
-  writeFileSync(file, raw);
-  return toProjectPath(root, file);
+  writeFileSync(path.join(dir, "system-prompt.md"), systemPrompt);
+  writeFileSync(path.join(dir, "input.md"), userMessage);
+  const trace = path.join(dir, "trace.jsonl");
+  writeFileSync(trace, "");
+  return trace;
 }
 
-function withLog<T>(log: string, fn: () => T): T {
+async function withLog<T>(log: string, fn: () => T | Promise<T>): Promise<T> {
   try {
-    return fn();
+    return await fn();
   } catch (err) {
-    if (err instanceof DoppelblindError) err.details.push(`Agent response: ${log}`);
+    if (err instanceof DoppelblindError) err.details.push(`Agent trace: ${log}`);
     throw err;
   }
 }

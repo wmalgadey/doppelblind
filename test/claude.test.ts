@@ -32,6 +32,8 @@ describe("claude", () => {
     const call = JSON.parse(readFileSync(record, "utf8"));
     const flag = (name: string) => call.args[call.args.indexOf(name) + 1];
     assert.ok(call.args.includes("--print"));
+    assert.equal(flag("--output-format"), "stream-json");
+    assert.ok(call.args.includes("--verbose"));
     assert.equal(flag("--tools"), "");
     assert.equal(flag("--setting-sources"), "");
     assert.equal(flag("--system-prompt"), "role prompt");
@@ -40,6 +42,23 @@ describe("claude", () => {
     assert.equal(call.stdin, "the brief");
     assert.ok(path.basename(call.cwd).startsWith("doppelblind-agent-"));
     assert.notEqual(call.cwd, process.cwd());
+  });
+
+  test("every event is appended to the trace, and the result is read from the last result event", async () => {
+    const events = [{ type: "system", subtype: "init" }, { type: "assistant", message: { content: [] } }];
+    const stdout = [...events.map((e) => JSON.stringify(e)), SUCCESS, ""].join("\n");
+    useFake(stdout);
+    const trace = path.join(mkdtempSync(path.join(tmpdir(), "trace-")), "trace.jsonl");
+    const response = await runClaude({ ...request, trace });
+    assert.deepEqual(response.output, { ok: true });
+    assert.equal(readFileSync(trace, "utf8"), stdout);
+  });
+
+  test("a failed run still leaves its trace", async () => {
+    useFake(JSON.stringify({ type: "system", subtype: "init" }) + "\n", 1);
+    const trace = path.join(mkdtempSync(path.join(tmpdir(), "trace-")), "trace.jsonl");
+    await assert.rejects(runClaude({ ...request, trace }), /no JSON result/);
+    assert.equal(readFileSync(trace, "utf8"), '{"type":"system","subtype":"init"}\n');
   });
 
   test("a missing CLI is reported with a hint", async () => {
@@ -55,7 +74,7 @@ describe("claude", () => {
 
   test("non-JSON output, error results and missing structured output fail", () => {
     assert.throws(() => parseResponse("garbage", "boom", 1), /no JSON result/);
-    assert.throws(() => parseResponse(JSON.stringify({ subtype: "error_max_budget_usd", is_error: true }), "", 1), /Agent run failed/);
-    assert.throws(() => parseResponse(JSON.stringify({ subtype: "success", is_error: false }), "", 0), /no structured output/);
+    assert.throws(() => parseResponse(JSON.stringify({ type: "result", subtype: "error_max_budget_usd", is_error: true }), "", 1), /Agent run failed/);
+    assert.throws(() => parseResponse(JSON.stringify({ type: "result", subtype: "success", is_error: false }), "", 0), /no structured output/);
   });
 });

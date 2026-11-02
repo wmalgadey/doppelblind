@@ -12,7 +12,8 @@ const CONTRACT = JSON.stringify({ sources: ["docs/product.md", "docs/decisions.m
 function fakeAgent(output: unknown, calls: AgentRequest[] = []): Agent {
   return async (request) => {
     calls.push(request);
-    return { output, raw: JSON.stringify({ structured_output: output }), costUsd: 0.1, durationMs: 3000 };
+    if (request.trace) writeFileSync(request.trace, JSON.stringify({ type: "result", structured_output: output }) + "\n");
+    return { output, costUsd: 0.1, durationMs: 3000 };
   };
 }
 
@@ -128,16 +129,42 @@ describe("spec-flow", () => {
     ]);
   });
 
-  test("invalid agent output writes no spec but keeps the response in the run log", async () => {
+  test("each run keeps the agent's prompt, input and trace in a run folder", async () => {
+    const root = project();
+    const ui = recordingUi();
+    const calls: AgentRequest[] = [];
+    await runSpecFlow({ cwd: root, brief: "docs/briefs/greeting.md", ui, agent: fakeAgent(sampleSpec(), calls) });
+
+    const runs = path.join(root, ".doppelblind", "runs");
+    const [run] = readdirSync(runs);
+    assert.match(run, /-spec-agent$/);
+    assert.deepEqual(readdirSync(path.join(runs, run)).sort(), ["input.md", "system-prompt.md", "trace.jsonl"]);
+    assert.equal(readFileSync(path.join(runs, run, "input.md"), "utf8"), calls[0].userMessage);
+    assert.equal(readFileSync(path.join(runs, run, "system-prompt.md"), "utf8"), calls[0].systemPrompt);
+    assert.equal(calls[0].trace, path.join(runs, run, "trace.jsonl"));
+    assert.ok(ui.events.includes(`note: trace: .doppelblind/runs/${run}/trace.jsonl`));
+  });
+
+  test("invalid agent output writes no spec but names the trace", async () => {
     const root = project();
     const ui = recordingUi();
     await assert.rejects(
       runSpecFlow({ cwd: root, brief: "docs/briefs/greeting.md", ui, agent: fakeAgent({ title: "x", criteria: [] }) }),
-      (err: DoppelblindError) => err.details.some((d) => d.startsWith("Agent response: .doppelblind/runs/")),
+      (err: DoppelblindError) => err.details.some((d) => /^Agent trace: \.doppelblind\/runs\/.*-spec-agent\/trace\.jsonl$/.test(d)),
     );
     assert.ok(ui.events.includes("fail: Validating output against schema"));
     assert.ok(!existsSync(path.join(root, "specs")));
     assert.equal(readdirSync(path.join(root, ".doppelblind", "runs")).length, 1);
+  });
+
+  test("a failed agent run names the trace", async () => {
+    const failing: Agent = async () => {
+      throw new DoppelblindError("Agent run failed.", ["error_max_budget_usd"]);
+    };
+    await assert.rejects(
+      runSpecFlow({ cwd: project(), brief: "docs/briefs/greeting.md", ui: recordingUi(), agent: failing }),
+      (err: DoppelblindError) => err.details.some((d) => d.startsWith("Agent trace: .doppelblind/runs/")),
+    );
   });
 
   test("a citation of a non-binding source fails the gate and writes no spec", async () => {
