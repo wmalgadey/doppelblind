@@ -48,17 +48,45 @@ describe("claude", () => {
     const events = [{ type: "system", subtype: "init" }, { type: "assistant", message: { content: [] } }];
     const stdout = [...events.map((e) => JSON.stringify(e)), SUCCESS, ""].join("\n");
     useFake(stdout);
-    const trace = path.join(mkdtempSync(path.join(tmpdir(), "trace-")), "trace.jsonl");
-    const response = await runClaude({ ...request, trace });
+    const runDir = mkdtempSync(path.join(tmpdir(), "run-"));
+    const response = await runClaude({ ...request, runDir });
     assert.deepEqual(response.output, { ok: true });
-    assert.equal(readFileSync(trace, "utf8"), stdout);
+    assert.equal(readFileSync(path.join(runDir, "trace.jsonl"), "utf8"), stdout);
+  });
+
+  test("the call is archived with its arguments, input and exit", async () => {
+    const record = useFake(SUCCESS);
+    const runDir = mkdtempSync(path.join(tmpdir(), "run-"));
+    await runClaude({ ...request, runDir });
+    const made = JSON.parse(readFileSync(record, "utf8"));
+    const call = JSON.parse(readFileSync(path.join(runDir, "call.json"), "utf8"));
+    assert.equal(call.bin, FAKE);
+    assert.deepEqual(call.args, made.args);
+    assert.equal(call.cwd, made.cwd);
+    assert.equal(call.stdin, "the brief");
+    assert.equal(call.timeoutMs, 10_000);
+    assert.equal(call.exitCode, 0);
+    assert.ok(Date.parse(call.startedAt) <= Date.parse(call.endedAt));
   });
 
   test("a failed run still leaves its trace", async () => {
     useFake(JSON.stringify({ type: "system", subtype: "init" }) + "\n", 1);
-    const trace = path.join(mkdtempSync(path.join(tmpdir(), "trace-")), "trace.jsonl");
-    await assert.rejects(runClaude({ ...request, trace }), /no JSON result/);
-    assert.equal(readFileSync(trace, "utf8"), '{"type":"system","subtype":"init"}\n');
+    const runDir = mkdtempSync(path.join(tmpdir(), "run-"));
+    await assert.rejects(runClaude({ ...request, runDir }), /no JSON result/);
+    assert.equal(readFileSync(path.join(runDir, "trace.jsonl"), "utf8"), '{"type":"system","subtype":"init"}\n');
+    const call = JSON.parse(readFileSync(path.join(runDir, "call.json"), "utf8"));
+    assert.equal(call.exitCode, 1);
+    assert.match(call.error, /no JSON result/);
+  });
+
+  test("a run that times out archives the call with its error", async () => {
+    useFake(SUCCESS);
+    process.env.FAKE_CLAUDE_SLEEP_MS = "5000";
+    const runDir = mkdtempSync(path.join(tmpdir(), "run-"));
+    await assert.rejects(runClaude({ ...request, timeoutMs: 200, runDir }), /did not finish within/);
+    const call = JSON.parse(readFileSync(path.join(runDir, "call.json"), "utf8"));
+    assert.match(call.error, /did not finish within/);
+    assert.ok(call.endedAt);
   });
 
   test("a missing CLI is reported with a hint", async () => {

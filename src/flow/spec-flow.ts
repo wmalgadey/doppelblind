@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { runClaude, type Agent } from "../agent/claude.ts";
+import { runClaude, TRACE_FILE, type Agent } from "../agent/claude.ts";
 import { loadContract, toProjectPath } from "../contract.ts";
 import { DoppelblindError } from "../errors.ts";
 import { validateOutput } from "../gates/schema.ts";
@@ -58,12 +58,12 @@ export async function runSpecFlow(options: SpecFlowOptions): Promise<SpecFlowRes
     timeoutMs: options.timeoutMs ?? 15 * 60_000,
     maxBudgetUsd: options.maxBudgetUsd ?? 5,
   };
-  const trace = startRunLog(contract.root, request.systemPrompt, request.userMessage);
-  const log = toProjectPath(contract.root, trace);
+  const runDir = startRunLog(contract.root, request.systemPrompt, request.userMessage);
+  const log = toProjectPath(contract.root, path.join(runDir, TRACE_FILE));
   ui.note(`trace: ${log}`);
 
   const response = await step(ui, "Spec agent is writing the spec",
-    () => withLog(log, () => agent({ ...request, trace })), describeCost);
+    () => withLog(log, () => agent({ ...request, runDir })), describeCost);
 
   const spec = await step(ui, "Validating output against schema",
     () => withLog(log, () => validateOutput<specAgent.SpecOutput>(specAgent.schema, response.output)));
@@ -114,16 +114,15 @@ function describeCost(response: { costUsd?: number; durationMs?: number }): stri
 
 /**
  * Starts a run folder in the project's run state with the agent's prompt and input,
- * and returns the trace file the agent's events are written to, so any run can be inspected.
+ * which the agent completes with its call and trace, so any run can be inspected.
  */
 function startRunLog(root: string, systemPrompt: string, userMessage: string): string {
   const dir = path.join(root, ".doppelblind", "runs", `${new Date().toISOString().replace(/[:.]/g, "-")}-spec-agent`);
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, "system-prompt.md"), systemPrompt);
   writeFileSync(path.join(dir, "input.md"), userMessage);
-  const trace = path.join(dir, "trace.jsonl");
-  writeFileSync(trace, "");
-  return trace;
+  writeFileSync(path.join(dir, TRACE_FILE), "");
+  return dir;
 }
 
 async function withLog<T>(log: string, fn: () => T | Promise<T>): Promise<T> {

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { appendFileSync, mkdtempSync, rmSync } from "node:fs";
+import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { DoppelblindError } from "../errors.ts";
@@ -11,9 +11,12 @@ export interface AgentRequest {
   schema: object;
   timeoutMs: number;
   maxBudgetUsd: number;
-  /** File every event of the run is appended to as it arrives, one JSON object per line. */
-  trace?: string;
+  /** Folder the run is archived in: the call in `call.json`, every event in `trace.jsonl`. */
+  runDir?: string;
 }
+
+export const CALL_FILE = "call.json";
+export const TRACE_FILE = "trace.jsonl";
 
 export interface AgentResponse {
   /** Structured output as returned by the CLI; not yet validated. */
@@ -33,6 +36,8 @@ export function claudeBin(): string {
  * Runs Claude Code headless with no tools, no settings, no project files and the role's
  * own system prompt, in an empty working directory. The agent sees only `userMessage`.
  * The CLI streams its events, so the trace grows while the agent works and survives a failed run.
+ * The call — binary, arguments, working directory, stdin, limits — is archived before it starts and
+ * completed with its exit when it ends.
  */
 export const runClaude: Agent = async (request) => {
   const workdir = mkdtempSync(path.join(tmpdir(), "doppelblind-agent-"));
@@ -48,11 +53,28 @@ export const runClaude: Agent = async (request) => {
     "--no-session-persistence",
     "--max-budget-usd", String(request.maxBudgetUsd),
   ];
+  const { runDir } = request;
+  const call: Record<string, unknown> = {
+    bin: claudeBin(),
+    args,
+    cwd: workdir,
+    stdin: request.userMessage,
+    timeoutMs: request.timeoutMs,
+    startedAt: new Date().toISOString(),
+  };
+  const archive = () => runDir && writeFileSync(path.join(runDir, CALL_FILE), JSON.stringify(call, null, 2) + "\n");
+  archive();
+  const onStdout = runDir ? (chunk: string) => appendFileSync(path.join(runDir, TRACE_FILE), chunk) : undefined;
   try {
-    const onStdout = request.trace ? (chunk: string) => appendFileSync(request.trace!, chunk) : undefined;
     const { stdout, stderr, code } = await run(claudeBin(), args, workdir, request.userMessage, request.timeoutMs, onStdout);
+    Object.assign(call, { endedAt: new Date().toISOString(), exitCode: code, stderr });
     return parseResponse(stdout, stderr, code);
+  } catch (err) {
+    call.endedAt ??= new Date().toISOString();
+    call.error = err instanceof Error ? err.message : String(err);
+    throw err;
   } finally {
+    archive();
     rmSync(workdir, { recursive: true, force: true });
   }
 };

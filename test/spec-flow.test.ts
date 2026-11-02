@@ -12,7 +12,7 @@ const CONTRACT = JSON.stringify({ sources: ["docs/product.md", "docs/decisions.m
 function fakeAgent(output: unknown, calls: AgentRequest[] = []): Agent {
   return async (request) => {
     calls.push(request);
-    if (request.trace) writeFileSync(request.trace, JSON.stringify({ type: "result", structured_output: output }) + "\n");
+    if (request.runDir) writeFileSync(path.join(request.runDir, "trace.jsonl"), JSON.stringify({ type: "result", structured_output: output }) + "\n");
     return { output, costUsd: 0.1, durationMs: 3000 };
   };
 }
@@ -141,7 +141,7 @@ describe("spec-flow", () => {
     assert.deepEqual(readdirSync(path.join(runs, run)).sort(), ["input.md", "system-prompt.md", "trace.jsonl"]);
     assert.equal(readFileSync(path.join(runs, run, "input.md"), "utf8"), calls[0].userMessage);
     assert.equal(readFileSync(path.join(runs, run, "system-prompt.md"), "utf8"), calls[0].systemPrompt);
-    assert.equal(calls[0].trace, path.join(runs, run, "trace.jsonl"));
+    assert.equal(calls[0].runDir, path.join(runs, run));
     assert.ok(ui.events.includes(`note: trace: .doppelblind/runs/${run}/trace.jsonl`));
   });
 
