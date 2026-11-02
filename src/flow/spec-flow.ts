@@ -50,6 +50,7 @@ export async function runSpecFlow(options: SpecFlowOptions): Promise<SpecFlowRes
   const existing = findSpecFolder(specsDir, briefPath);
   const previous = existing === undefined ? undefined : readPrevious(contract.root, existing);
   if (previous) ui.note(`revising ${previous.spec.path} (${previous.answered.length} answered questions)`);
+  if (previous?.answered.length === 0) ui.note(`no answered questions in ${previous.spec.path}; unsaved answers are not seen`);
 
   const request = {
     systemPrompt: specAgent.systemPrompt,
@@ -74,13 +75,19 @@ export async function runSpecFlow(options: SpecFlowOptions): Promise<SpecFlowRes
     if (problems.length > 0) throw new DoppelblindError("The spec does not pass its gates.", problems);
   }), () => `${spec.criteria.length} criteria`);
 
-  const specFile = await step(ui, "Writing spec.md", () => {
+  const { file: specFile } = await step(ui, "Writing spec.md", () => withLog(log, () => {
     const folder = existing ?? createSpecFolder(specsDir, spec.short_name);
     const file = path.join(folder, "spec.md");
+    if (previous && readFileSync(file, "utf8") !== previous.spec.content) {
+      throw new DoppelblindError(`${previous.spec.path} changed while the agent was running; it was not overwritten.`, [
+        "Run again to revise it with its current content.",
+      ]);
+    }
     const briefLink = path.relative(folder, path.join(contract.root, briefPath)).split(path.sep).join("/");
-    writeFileSync(file, renderSpec(spec, briefPath, briefLink, previous?.answered));
-    return file;
-  }, (file) => toProjectPath(contract.root, file));
+    const markdown = renderSpec(spec, briefPath, briefLink, previous?.answered);
+    writeFileSync(file, markdown);
+    return { file, unchanged: previous?.spec.content === markdown };
+  }), ({ file, unchanged }) => toProjectPath(contract.root, file) + (previous ? (unchanged ? ", unchanged" : ", updated") : ""));
 
   return { specFile, revised: previous !== undefined, criteria: spec.criteria.length, openQuestions: spec.open_questions.length };
 }

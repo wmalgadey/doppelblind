@@ -76,6 +76,34 @@ describe("spec-flow", () => {
     assert.match(md, /## Answered questions\n\n### Q-01\n\nWhich words does the greeting use\?\n\n\*\*Answer:\*\*\n\nHello and welcome\.\n$/);
   });
 
+  test("a revision says whether spec.md changed and warns when nothing is answered", async () => {
+    const root = project();
+    const opts = { cwd: root, brief: "docs/briefs/greeting.md" };
+    await runSpecFlow({ ...opts, ui: recordingUi(), agent: fakeAgent(sampleSpec()) });
+
+    const same = recordingUi();
+    await runSpecFlow({ ...opts, ui: same, agent: fakeAgent(sampleSpec()) });
+    assert.ok(same.events.includes("note: no answered questions in specs/001-greet-everyone/spec.md; unsaved answers are not seen"));
+    assert.ok(same.events.includes("done: Writing spec.md (specs/001-greet-everyone/spec.md, unchanged)"));
+
+    const changed = recordingUi();
+    await runSpecFlow({ ...opts, ui: changed, agent: fakeAgent(sampleSpec({ wishes: [] })) });
+    assert.ok(changed.events.includes("done: Writing spec.md (specs/001-greet-everyone/spec.md, updated)"));
+  });
+
+  test("answers saved while the agent runs are not overwritten", async () => {
+    const root = project();
+    const opts = { cwd: root, brief: "docs/briefs/greeting.md", ui: recordingUi() };
+    const first = await runSpecFlow({ ...opts, agent: fakeAgent(sampleSpec()) });
+    const saved = readFileSync(first.specFile, "utf8").replace("**Answer:**\n", "**Answer:**\n\nHello.\n");
+    const savingAgent: Agent = async (request) => {
+      writeFileSync(first.specFile, saved);
+      return fakeAgent(sampleSpec({ open_questions: [] }))(request);
+    };
+    await assert.rejects(runSpecFlow({ ...opts, agent: savingAgent }), /changed while the agent was running; it was not overwritten/);
+    assert.equal(readFileSync(first.specFile, "utf8"), saved);
+  });
+
   test("answers survive further revisions", async () => {
     const root = project();
     const opts = { cwd: root, brief: "docs/briefs/greeting.md", ui: recordingUi() };

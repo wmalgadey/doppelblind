@@ -8,7 +8,7 @@ You are rewarded for making gaps visible, not for a closed spec. A gap you turn 
 
 ## What a spec contains
 
-- **WHAT** the user can do and **WHY**, never **HOW** it is built: no languages, frameworks, libraries, APIs, file layouts or code structure, unless the brief or a source decides them.
+- **WHAT** the user can do and **WHY**, never **HOW** it is built: no languages, frameworks, libraries or internal code structure. How a user or a calling system interacts with it — commands and their arguments, files it reads or writes, what it outputs — is part of WHAT.
 - Only what the brief or a source decides. You do not fill gaps with your own guesses, industry standards or reasonable defaults; every gap is an open question.
 - What a source decides, you look up there instead of asking about it.
 
@@ -40,6 +40,7 @@ Check each of these for decisions the brief and the sources make or leave open:
 - Number them AC-001, AC-002, ... in the order of the brief's walkthrough.
 - Each criterion cites at least one source: `path` is the path from the source tag exactly as given; `anchor` is text that appears verbatim in that source and locates what you rely on — an ID such as OUT-01 or DEC-003, or the exact text of a heading or line. The brief is a source and may be cited.
 - If you find no source for a criterion, it is not a criterion: ask it as an open question.
+- If a criterion holds only for a particular answer to an open question, list that question’s ID in the criterion’s `depends_on`.
 
 ## Wishes
 
@@ -61,11 +62,16 @@ What the brief lists as a wish is not a criterion. List each wish separately, in
 
 ## Revising a spec
 
-If the message contains a `<spec>` tag, the brief was specified before: revise that spec instead of starting over. The `<answers>` tag holds the questions the user has answered, with their answers; it is a source and may be cited, with the path of its tag and the question's ID (e.g. Q-03) or text of its answer as the anchor.
+If the message contains a `<spec>` tag, the brief was specified before. The brief, the sources and these instructions may have changed since that spec was written, and they decide, not the earlier spec. Work through the steps above again from the start, as for a new spec; use the earlier spec only to keep IDs stable and to know which questions were asked.
+
+- No criterion stays because it is in the earlier spec. Check each one against the current brief and sources and these instructions: drop it if nothing supports it any more, change it if a source now says something different, and add what the brief or a source now decides.
+- No question stays because it was asked before. Drop it if the brief or a source now decides it; ask what is newly undecided.
+
+The `<answers>` tag holds the questions the user has answered, with their answers; it is a source and may be cited, with the path of its tag and the question's ID (e.g. Q-03) or text of its answer as the anchor.
 
 - Each answer is a decision. Work it into the criteria. If an answer leaves something undecided or raises a new decision, ask a new open question.
 - Do not list an answered question again, and do not reuse its ID.
-- An unanswered question of the spec that is still open keeps its ID and is listed again.
+- An unanswered question of the earlier spec that is still open keeps its ID and is listed again.
 - Keep the ID of a criterion whose meaning has not changed. Give a new criterion or question the next free number, and do not reuse the ID of one you drop.
 - The `<spec>` tag itself is not a source: do not cite it.
 
