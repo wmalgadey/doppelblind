@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { runClaude, type Agent } from "../agent/claude.ts";
 import { loadContract, toProjectPath } from "../contract.ts";
@@ -6,8 +6,9 @@ import { DoppelblindError } from "../errors.ts";
 import { validateOutput } from "../gates/schema.ts";
 import { checkSpec } from "../gates/spec.ts";
 import * as specAgent from "../roles/spec-agent/index.ts";
-import { loadSources } from "../sources.ts";
-import { createSpecFolder } from "../spec/folder.ts";
+import { loadSources, type Source } from "../sources.ts";
+import { readAnswers, renderAnswers, type AnsweredQuestion } from "../spec/answers.ts";
+import { createSpecFolder, findSpecFolder } from "../spec/folder.ts";
 import { renderSpec } from "../spec/render.ts";
 import type { Ui } from "../tui.ts";
 
@@ -23,11 +24,16 @@ export interface SpecFlowOptions {
 
 export interface SpecFlowResult {
   specFile: string;
+  /** Whether an existing spec for the brief was revised instead of a new one written. */
+  revised: boolean;
   criteria: number;
   openQuestions: number;
 }
 
-/** Hands a brief to the spec agent and writes the resulting spec.md. No other role runs. */
+/**
+ * Hands a brief to the spec agent and writes the resulting spec.md. No other role runs.
+ * If a spec for the brief exists, the agent revises it and its answered questions are kept.
+ */
 export async function runSpecFlow(options: SpecFlowOptions): Promise<SpecFlowResult> {
   const { ui, agent = runClaude } = options;
 
@@ -40,10 +46,15 @@ export async function runSpecFlow(options: SpecFlowOptions): Promise<SpecFlowRes
     (s) => s.all.filter((x) => x !== s.brief).map((x) => x.path).join(", ") || "brief only");
   for (const p of sources.missing) ui.note(`declared source not found, skipped: ${p}`);
 
+  const specsDir = path.join(contract.root, contract.specs);
+  const existing = findSpecFolder(specsDir, briefPath);
+  const previous = existing === undefined ? undefined : readPrevious(contract.root, existing);
+  if (previous) ui.note(`revising ${previous.spec.path} (${previous.answered.length} answered questions)`);
+
   const response = await step(ui, "Spec agent is writing the spec", () =>
     agent({
       systemPrompt: specAgent.systemPrompt,
-      userMessage: specAgent.buildUserMessage(sources.brief, sources.all),
+      userMessage: specAgent.buildUserMessage(sources.brief, sources.all, previous),
       schema: specAgent.schema,
       timeoutMs: options.timeoutMs ?? 15 * 60_000,
       maxBudgetUsd: options.maxBudgetUsd ?? 5,
@@ -54,19 +65,28 @@ export async function runSpecFlow(options: SpecFlowOptions): Promise<SpecFlowRes
     () => withLog(log, () => validateOutput<specAgent.SpecOutput>(specAgent.schema, response.output)));
 
   await step(ui, "Checking criteria and citations", () => withLog(log, () => {
-    const problems = checkSpec(spec, sources.all);
+    const citable = previous ? [...sources.all, previous.answers] : sources.all;
+    const problems = checkSpec(spec, citable, previous?.answered.map((q) => q.id));
     if (problems.length > 0) throw new DoppelblindError("The spec does not pass its gates.", problems);
   }), () => `${spec.criteria.length} criteria`);
 
   const specFile = await step(ui, "Writing spec.md", () => {
-    const folder = createSpecFolder(path.join(contract.root, contract.specs), spec.short_name);
+    const folder = existing ?? createSpecFolder(specsDir, spec.short_name);
     const file = path.join(folder, "spec.md");
     const briefLink = path.relative(folder, path.join(contract.root, briefPath)).split(path.sep).join("/");
-    writeFileSync(file, renderSpec(spec, briefPath, briefLink));
+    writeFileSync(file, renderSpec(spec, briefPath, briefLink, previous?.answered));
     return file;
   }, (file) => toProjectPath(contract.root, file));
 
-  return { specFile, criteria: spec.criteria.length, openQuestions: spec.open_questions.length };
+  return { specFile, revised: previous !== undefined, criteria: spec.criteria.length, openQuestions: spec.open_questions.length };
+}
+
+/** The current spec of a brief, and its answered questions as a source the revised spec may cite. */
+function readPrevious(root: string, folder: string): { spec: Source; answers: Source; answered: AnsweredQuestion[] } {
+  const file = path.join(folder, "spec.md");
+  const spec = { path: toProjectPath(root, file), content: readFileSync(file, "utf8") };
+  const answered = readAnswers(spec.content);
+  return { spec, answers: { path: spec.path, content: renderAnswers(answered).join("\n") }, answered };
 }
 
 async function step<T>(ui: Ui, label: string, fn: () => T | Promise<T>, detail?: (result: T) => string): Promise<T> {

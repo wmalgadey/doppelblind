@@ -16,6 +16,8 @@ doppelblind spec docs/briefs/<brief>.md      # hand the brief to the spec agent
 
 Both commands currently run only the spec agent. It writes `specs/NNN-<short-name>/spec.md` with criteria in Given-When-Then, wishes and open questions; answer the open questions in that file. The agent's raw response is kept in `.doppelblind/runs/`.
 
+Handing the same brief to the spec agent again revises its existing spec in place: the agent works your answers into the criteria, and the answered questions are kept under "Answered questions".
+
 The project declares its binding sources and the specs directory in `.doppelblind.conf`:
 
 ```json

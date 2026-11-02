@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, test } from "vitest";
 import type { Agent, AgentRequest } from "../src/agent/claude.ts";
@@ -45,12 +45,67 @@ describe("spec-flow", () => {
     assert.ok(!message.includes("implementation the spec agent must not see"));
   });
 
-  test("a second run gets the next number", async () => {
+  test("a second run for the same brief revises its spec in place", async () => {
     const root = project();
-    const opts = { cwd: root, brief: "docs/briefs/greeting.md", ui: recordingUi(), agent: fakeAgent(sampleSpec()) };
-    await runSpecFlow(opts);
-    const second = await runSpecFlow(opts);
+    const first = await runSpecFlow({ cwd: root, brief: "docs/briefs/greeting.md", ui: recordingUi(), agent: fakeAgent(sampleSpec()) });
+    assert.equal(first.revised, false);
+    writeFileSync(first.specFile, readFileSync(first.specFile, "utf8").replace("**Answer:**\n", "**Answer:**\n\nHello and welcome.\n"));
+
+    const calls: AgentRequest[] = [];
+    const revision = sampleSpec({
+      short_name: "other-name",
+      criteria: [{ ...sampleSpec().criteria[0], sources: [{ path: "specs/001-greet-everyone/spec.md", anchor: "Hello and welcome." }] }],
+      open_questions: [{ id: "Q-02", question: "In which language is the greeting?" }],
+    });
+    const ui = recordingUi();
+    const second = await runSpecFlow({ cwd: root, brief: "docs/briefs/greeting.md", ui, agent: fakeAgent(revision, calls) });
+
+    assert.equal(second.specFile, first.specFile);
+    assert.equal(second.revised, true);
+    assert.deepEqual(readdirSync(path.join(root, "specs")), ["001-greet-everyone"]);
+    assert.ok(ui.events.includes("note: revising specs/001-greet-everyone/spec.md (1 answered questions)"));
+
+    const message = calls[0].userMessage;
+    assert.ok(message.includes('<spec path="specs/001-greet-everyone/spec.md">\n# Grüße für alle'));
+    assert.ok(message.includes('<answers path="specs/001-greet-everyone/spec.md">\n### Q-01\n\nWhich words does the greeting use?\n\n**Answer:**\n\nHello and welcome.'));
+    assert.ok(message.endsWith("Revise the specification for this brief."));
+
+    const md = readFileSync(second.specFile, "utf8");
+    assert.match(md, /## Open questions\n\n### Q-02\n/);
+    assert.match(md, /## Answered questions\n\n### Q-01\n\nWhich words does the greeting use\?\n\n\*\*Answer:\*\*\n\nHello and welcome\.\n$/);
+  });
+
+  test("answers survive further revisions", async () => {
+    const root = project();
+    const opts = { cwd: root, brief: "docs/briefs/greeting.md", ui: recordingUi() };
+    const first = await runSpecFlow({ ...opts, agent: fakeAgent(sampleSpec()) });
+    writeFileSync(first.specFile, readFileSync(first.specFile, "utf8").replace("**Answer:**\n", "**Answer:**\n\nHello.\n"));
+    await runSpecFlow({ ...opts, agent: fakeAgent(sampleSpec({ open_questions: [] })) });
+    const third = await runSpecFlow({ ...opts, agent: fakeAgent(sampleSpec({ open_questions: [] })) });
+    assert.match(readFileSync(third.specFile, "utf8"), /## Answered questions\n\n### Q-01\n\nWhich words does the greeting use\?\n\n\*\*Answer:\*\*\n\nHello\.\n$/);
+  });
+
+  test("a revision may not ask an answered question again under its ID", async () => {
+    const root = project();
+    const opts = { cwd: root, brief: "docs/briefs/greeting.md", ui: recordingUi() };
+    const first = await runSpecFlow({ ...opts, agent: fakeAgent(sampleSpec()) });
+    const answered = readFileSync(first.specFile, "utf8").replace("**Answer:**\n", "**Answer:**\n\nHello.\n");
+    writeFileSync(first.specFile, answered);
+    await assert.rejects(
+      runSpecFlow({ ...opts, agent: fakeAgent(sampleSpec()) }),
+      (err: DoppelblindError) => err.details.includes("Open question Q-01 reuses the ID of an answered question."),
+    );
+    assert.equal(readFileSync(first.specFile, "utf8"), answered);
+  });
+
+  test("a different brief gets the next number", async () => {
+    const root = project();
+    writeFileSync(path.join(root, "docs/briefs/farewell.md"), BRIEF);
+    const spec = sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], sources: [{ path: "docs/briefs/farewell.md", anchor: "## Walkthrough" }] }] });
+    await runSpecFlow({ cwd: root, brief: "docs/briefs/greeting.md", ui: recordingUi(), agent: fakeAgent(sampleSpec()) });
+    const second = await runSpecFlow({ cwd: root, brief: "docs/briefs/farewell.md", ui: recordingUi(), agent: fakeAgent(spec) });
     assert.equal(path.basename(path.dirname(second.specFile)), "002-greet-everyone");
+    assert.equal(second.revised, false);
   });
 
   test("the brief path is relative to the current directory", async () => {

@@ -36,13 +36,22 @@ const dir = import.meta.dirname;
 export const systemPrompt: string = readFileSync(path.join(dir, "prompt.md"), "utf8");
 export const schema: object = JSON.parse(readFileSync(path.join(dir, "schema.json"), "utf8"));
 
-/** The only input the spec agent gets: the brief and the binding sources. */
-export function buildUserMessage(brief: Source, sources: Source[]): string {
+/**
+ * The only input the spec agent gets: the brief, the binding sources and,
+ * when the brief was specified before, the current spec and its answered questions.
+ */
+export function buildUserMessage(brief: Source, sources: Source[], previous?: { spec: Source; answers: Source }): string {
   const parts = [`<brief path="${brief.path}">\n${brief.content.trim()}\n</brief>`];
   for (const s of sources) {
     if (s.path === brief.path) continue;
     parts.push(`<source path="${s.path}">\n${s.content.trim()}\n</source>`);
   }
-  parts.push("Write the specification for this brief.");
+  if (!previous) {
+    parts.push("Write the specification for this brief.");
+    return parts.join("\n\n");
+  }
+  parts.push(`<spec path="${previous.spec.path}">\n${previous.spec.content.trim()}\n</spec>`);
+  parts.push(`<answers path="${previous.answers.path}">\n${previous.answers.content.trim() || "None."}\n</answers>`);
+  parts.push("Revise the specification for this brief.");
   return parts.join("\n\n");
 }

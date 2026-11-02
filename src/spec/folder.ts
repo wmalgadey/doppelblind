@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const NUMBERED = /^(\d{3,})-/;
@@ -30,6 +30,25 @@ export function nextNumber(specsDir: string): number {
     if (match) highest = Math.max(highest, Number(match[1]));
   }
   return highest + 1;
+}
+
+/**
+ * The folder whose spec.md was written for this brief, found by its `Brief:` line.
+ * If several were, the highest-numbered one; undefined if none was.
+ */
+export function findSpecFolder(specsDir: string, briefPath: string): string | undefined {
+  if (!existsSync(specsDir)) return undefined;
+  const briefLine = `Brief: [${briefPath}](`;
+  const folders = readdirSync(specsDir, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && NUMBERED.test(e.name))
+    .map((e) => e.name)
+    .sort((a, b) => Number(NUMBERED.exec(a)![1]) - Number(NUMBERED.exec(b)![1]));
+  for (const name of folders.reverse()) {
+    const file = path.join(specsDir, name, "spec.md");
+    if (!existsSync(file)) continue;
+    if (readFileSync(file, "utf8").split("\n").some((line) => line.startsWith(briefLine))) return path.join(specsDir, name);
+  }
+  return undefined;
 }
 
 /** Creates the next numbered folder for a spec and returns its absolute path. */

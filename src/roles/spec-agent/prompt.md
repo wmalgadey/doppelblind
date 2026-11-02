@@ -39,6 +39,16 @@ What the brief lists as a wish is not a criterion. List each wish separately, in
 - `title` is a short title of the change.
 - `short_name` is 2–4 lowercase words joined by dashes that capture the change, in action-noun form where possible (e.g. "brief-to-spec", "fix-payment-timeout"). Keep technical terms and acronyms.
 
+## Revising a spec
+
+If the message contains a `<spec>` tag, the brief was specified before: revise that spec instead of starting over. The `<answers>` tag holds the questions the user has answered, with their answers; it is a source and may be cited, with the path of its tag and the question's ID (e.g. Q-03) or text of its answer as the anchor.
+
+- Each answer is a decision. Work it into the criteria. If an answer leaves something undecided or raises a new decision, ask a new open question.
+- Do not list an answered question again, and do not reuse its ID.
+- An unanswered question of the spec that is still open keeps its ID and is listed again.
+- Keep the ID of a criterion whose meaning has not changed. Give a new criterion or question the next free number, and do not reuse the ID of one you drop.
+- The `<spec>` tag itself is not a source: do not cite it.
+
 ## Quality checks
 
 Before you answer, check and fix:
