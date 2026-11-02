@@ -1,7 +1,7 @@
 {
   "docs/briefs/orchestrator-spec-agent.md": {
     "folder": "specs/001-orchestrator-spec-agent",
-    "rounds": 2,
-    "status": "open"
+    "run": ".doppelblind/runs/2026-11-02T21-57-49-056Z-spec-agent",
+    "final": true
   }
 }

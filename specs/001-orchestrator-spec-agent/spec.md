@@ -1,535 +1,396 @@
-# Orchestrator CLI that runs the spec agent on a brief
+# Orchestrator CLI that turns a brief into a spec via the spec agent
 
 Brief: [docs/briefs/orchestrator-spec-agent.md](../../docs/briefs/orchestrator-spec-agent.md)
 
 ## Criteria
 
-### AC-001: Spec-agent command turns a brief into a spec.md
+### AC-001: Full-flow command produces a spec from a brief
 
-- **Given** a project with a readable brief file inside the project
-- **When** the user runs the orchestrator's command for the spec agent, passing the brief's path
-- **Then** after the run, a file spec.md exists in a numbered subfolder of the folder `specs` in the project root
+- **Given** A project whose root is the current directory and contains a readable brief file at a relative path, e.g. `docs/briefs/x.md`
+- **When** The user runs the orchestrator's full-flow command with that relative brief path
+- **Then** The spec agent runs, and when it succeeds a new numbered subfolder of `specs` exists in the project root and contains a file `spec.md`
 
-Sources: `docs/briefs/orchestrator-spec-agent.md` › OUT-01; `specs/001-orchestrator-spec-agent/answers.md` › one command for a specific agent (to jump into the flow), one command to run the complete flow where it currently is at!; `specs/001-orchestrator-spec-agent/answers.md` › in the project root
+Sources: `docs/briefs/orchestrator-spec-agent.md` › OUT-01; `docs/briefs/orchestrator-spec-agent.md` › Den Brief übergebe ich als Pfad relativ zum aktuellen Verzeichnis.; `specs/001-orchestrator-spec-agent/answers.md` › naming is up to the implementer, two commands, one for the complete flow one for the specific step
 
-Open questions: Q-08
+Unanswered: Q-27, Q-32, Q-33
 
-### AC-002: Flow command on a new brief runs only the spec agent
+### AC-002: Separate spec-step command produces a spec from a brief
 
-- **Given** a project with a readable brief for a new feature that has no spec yet
-- **When** the user runs the orchestrator's command that runs the complete flow, passing the brief's path
-- **Then** the spec agent runs, a spec.md is created as in AC-001, and the flow ends without starting any other role (test author, implementer, verifier, classifier or worst-case agent)
+- **Given** The same project and brief as in AC-001
+- **When** The user runs the orchestrator's command for the spec step alone (a command other than the full-flow command) with that relative brief path
+- **Then** The spec agent runs, and when it succeeds a new numbered subfolder of `specs` in the project root contains a file `spec.md`
 
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › one command for a specific agent (to jump into the flow), one command to run the complete flow where it currently is at!; `docs/briefs/orchestrator-spec-agent.md` › Es werden keine anderen Rollen gestartet.
+Sources: `specs/001-orchestrator-spec-agent/answers.md` › naming is up to the implementer, two commands, one for the complete flow one for the specific step
 
-Open questions: Q-01
+Unanswered: Q-27, Q-32, Q-33
 
-### AC-003: Brief path is resolved relative to the current directory
+### AC-003: Missing brief path argument aborts with an error
 
-- **Given** a brief at `docs/briefs/x.md` in the project and the user's current directory is `docs` inside the project
-- **When** the user runs the spec-agent command with the brief path `briefs/x.md`
-- **Then** the run uses the brief `docs/briefs/x.md` and creates a spec.md
+- **Given** A project whose root is the current directory
+- **When** The user runs either command without a brief path
+- **Then** An error message is shown, the run aborts, the spec agent is not started, and no new subfolder of `specs` is created
 
-Sources: `docs/briefs/orchestrator-spec-agent.md` › Den Brief übergebe ich als Pfad relativ zum aktuellen Verzeichnis.
+Sources: `specs/001-orchestrator-spec-agent/answers.md` › show an error message and abort
 
-Open questions: Q-09
+### AC-004: Non-existent brief path aborts with an error
 
-### AC-004: Missing brief file yields an error message
+- **Given** A project whose root is the current directory and no file at `docs/briefs/missing.md`
+- **When** The user runs either command with `docs/briefs/missing.md`
+- **Then** An error message is shown, the run aborts, the spec agent is not started, and no new subfolder of `specs` is created
 
-- **Given** a brief path that points to no existing file
-- **When** the user runs the spec-agent command with that path
-- **Then** an error message is shown and the spec agent is not started
+Sources: `specs/001-orchestrator-spec-agent/answers.md` › show an error message and abort
 
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › an error message
+### AC-005: Brief path pointing to a directory aborts with an error
 
-Open questions: Q-15
+- **Given** A project whose root is the current directory and a directory `docs/briefs`
+- **When** The user runs either command with `docs/briefs` as the brief path
+- **Then** An error message is shown, the run aborts, the spec agent is not started, and no new subfolder of `specs` is created
 
-### AC-005: Brief path pointing to a directory yields an error message
+Sources: `specs/001-orchestrator-spec-agent/answers.md` › show an error message and abort
 
-- **Given** a brief path that points to a directory inside the project
-- **When** the user runs the spec-agent command with that path
-- **Then** an error message is shown and the spec agent is not started
+### AC-006: Unreadable brief aborts with an error
 
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › an error message
+- **Given** A project whose root is the current directory and a brief file the user running the command has no read permission for
+- **When** The user runs either command with that brief path
+- **Then** An error message is shown, the run aborts, the spec agent is not started, and no new subfolder of `specs` is created
 
-Open questions: Q-15
+Sources: `specs/001-orchestrator-spec-agent/answers.md` › show an error message and abort
 
-### AC-006: Unreadable brief file yields an error message
+### AC-007: Missing specs folder is created in the project root
 
-- **Given** a brief file inside the project that the user's process has no permission to read
-- **When** the user runs the spec-agent command with its path
-- **Then** an error message is shown and the spec agent is not started
+- **Given** A project whose root has no `specs` folder and a readable brief
+- **When** A spec-create run succeeds
+- **Then** A folder `specs` exists directly in the project root and contains the new numbered subfolder with `spec.md`
 
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › an error message
+Sources: `specs/001-orchestrator-spec-agent/answers.md` › project root. create it if it does not exists
 
-Open questions: Q-15
+Unanswered: Q-32
 
-### AC-007: Brief path outside the project is rejected
+### AC-008: Spec subfolder name format
 
-- **Given** a readable file outside the project, reachable from the current directory via a relative path such as `../outside.md`
-- **When** the user runs the spec-agent command with that path
-- **Then** the path is not accepted, an error message is shown and the spec agent is not started
+- **Given** A successful spec-create run
+- **When** The user lists the subfolders of `specs`
+- **Then** The new subfolder's name matches `^[0-9]{3}-[a-z0-9]+(-[a-z0-9]+){1,3}$` (three digits, a dash, then 2–4 lowercase words joined by dashes)
 
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › no! no symlinks and only path inside the project.; `specs/001-orchestrator-spec-agent/answers.md` › an error message
+Sources: `specs/001-orchestrator-spec-agent/answers.md` › 3 digits; `docs/briefs/orchestrator-spec-agent.md` › Am Ende existiert eine `spec.md` in einem fortlaufend nummerierten Unterordner von `specs`
 
-Open questions: Q-08, Q-09, Q-15
+Unanswered: Q-38
 
-### AC-008: Brief given as a symlink is rejected
+### AC-009: Numbering increments the highest number without filling gaps
 
-- **Given** a symlink inside the project that points to a readable brief file
-- **When** the user runs the spec-agent command with the symlink's path
-- **Then** the path is not accepted, an error message is shown and the spec agent is not started
+- **Given** `specs` contains subfolders `001-alpha-one` and `003-beta-two` and no other numbered subfolder
+- **When** A spec-create run for a new brief succeeds
+- **Then** The new subfolder's name starts with `004-`, and no subfolder starting with `002-` is created
 
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › no! no symlinks and only path inside the project.; `specs/001-orchestrator-spec-agent/answers.md` › an error message
+Sources: `specs/001-orchestrator-spec-agent/answers.md` › close no gaps, just increment the highes 3 digit number
 
-Open questions: Q-10, Q-15
+Unanswered: Q-29, Q-39, Q-40
 
-### AC-009: Spec agent runs with Claude Code in headless mode
+### AC-010: Folders without a three-digit number do not affect numbering
 
-- **Given** a valid brief
-- **When** the user runs the spec-agent command
-- **Then** the spec agent is run through Claude Code in headless mode, without the user having to name an agent CLI
+- **Given** `specs` contains subfolders `002-alpha-one` and `drafts` and no other subfolder
+- **When** A spec-create run for a new brief succeeds
+- **Then** The new subfolder's name starts with `003-`
 
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › currently we should just use claude code. other clis are part of OUT-09; `docs/product.md` › Agents run through an agent CLI in headless mode.
+Sources: `specs/001-orchestrator-spec-agent/answers.md` › close no gaps, just increment the highes 3 digit number
 
-Open questions: Q-21
+Unanswered: Q-39
 
-### AC-010: Spec agent input contains the brief and sources but no code
+### AC-011: spec.md lists criteria with ID, Given-When-Then and cited sources
 
-- **Given** a project containing source code files, binding sources and a valid brief
-- **When** the spec-agent command runs
-- **Then** the recorded input of the spec agent (see AC-028) contains the brief and the binding sources and contains none of the project's code files
+- **Given** A successful spec-create run
+- **When** The user opens the generated `spec.md`
+- **Then** Each criterion in it shows an ID, a Given, a When and a Then, and at least one cited source consisting of a source path and an anchor
 
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › sure, it should not read the code itself, only functional descisions and requirements
+Sources: `docs/briefs/orchestrator-spec-agent.md` › Der Spec-Agent erzeugt eine Spezifikation mit Kriterien in Given-When-Then und offenen Fragen.; `docs/product.md` › each with an ID, a cited source and how it is proven
 
-Open questions: Q-06, Q-07
+Unanswered: Q-34
 
-### AC-011: Only the orchestrator writes the spec
+### AC-012: spec.md states how each criterion is proven
 
-- **Given** a project and a valid brief
-- **When** the spec-agent command completes
-- **Then** the only files created or changed in the project are the new spec folder with its spec.md and the content of the `.doppelblind` folder; the spec agent itself has written no file
+- **Given** A successful spec-create run
+- **When** The user opens the generated `spec.md`
+- **Then** Each criterion states whether it is proven by an acceptance test or by the user's review
 
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › there is no need to write anything, it can answer to the orchestrator which can create a structured spec; `specs/001-orchestrator-spec-agent/answers.md` › run state and logs, as well as input and output of the run, should be recorded and placed in a `.doppelblind` folder for later analysis
+Sources: `docs/product.md` › each with an ID, a cited source and how it is proven
 
-Open questions: Q-07
+Unanswered: Q-34
 
-### AC-012: spec.md contains criteria in Given-When-Then and open questions
+### AC-013: spec.md keeps wishes separate from criteria
 
-- **Given** a successful spec-agent run
-- **When** the user opens the created spec.md
-- **Then** it contains criteria, each with an ID, a Given, a When, a Then and at least one cited source, a list of wishes separate from the criteria, and a section of open questions
+- **Given** A brief with a Wishes section listing at least one wish
+- **When** A spec-create run succeeds and the user opens `spec.md`
+- **Then** The wishes appear in a part of `spec.md` separate from the criteria and carry no criterion ID
 
-Sources: `docs/briefs/orchestrator-spec-agent.md` › Der Spec-Agent erzeugt eine Spezifikation mit Kriterien in Given-When-Then und offenen Fragen.; `docs/product.md` › OUT-01
+Sources: `docs/product.md` › separate from wishes
 
-Open questions: Q-13, Q-14
+Unanswered: Q-34
 
-### AC-013: spec.md follows a user-changeable template
+### AC-014: spec.md lists open questions with a place to answer each
 
-- **Given** the spec template has been changed by the user (e.g. a section heading renamed)
-- **When** the spec-agent command runs on a brief
-- **Then** the created spec.md follows the changed template (e.g. contains the renamed heading)
+- **Given** A spec-create run whose spec agent returns at least one open question
+- **When** The user opens `spec.md`
+- **Then** Each open question appears with its ID, and `spec.md` provides a place for each question where the user can write the answer
 
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › create a template for specs which should be used by the agent. so a user has control over the content of a spec.; `specs/001-orchestrator-spec-agent/answers.md` › create a template for the user to change
+Sources: `docs/briefs/orchestrator-spec-agent.md` › Ich öffne die `spec.md` und beantworte die offenen Fragen dort.; `specs/001-orchestrator-spec-agent/answers.md` › the user writes the answers directly into the spec.md
 
-Open questions: Q-12, Q-13
+Unanswered: Q-34
 
-### AC-014: Invalid structured output is a failure, never an empty list
+### AC-015: Invalid structured output from the spec agent is a failure
 
-- **Given** the spec agent returns output that does not validate against its output schema
-- **When** the orchestrator processes that output
-- **Then** the run is reported as failed; no spec.md is written that presents the invalid output as a spec with empty criteria or an empty list of open questions
+- **Given** A spec-create run in which the spec agent returns output that does not match its output schema
+- **When** The run ends
+- **Then** An error is shown to the user, no new subfolder of `specs` and no `spec.md` is written, and the output is not treated as a spec with empty criteria or empty open questions
 
-Sources: `docs/product.md` › validates structured output against its schema — invalid output is a failure, never an empty list
+Sources: `docs/product.md` › invalid output is a failure, never an empty list; `specs/001-orchestrator-spec-agent/answers.md` › noting is written, the user will see the error
 
-Open questions: Q-13, Q-14
+Unanswered: Q-38
 
-### AC-015: TUI shows what is currently happening
+### AC-016: Agent CLI failure writes nothing
 
-- **Given** the command runs in an interactive terminal
-- **When** the spec agent is running
-- **Then** the terminal shows a text-based interface that states the step currently in progress (e.g. that the spec agent is running)
+- **Given** The agent CLI is not installed, not logged in, or exits with an error during the spec agent run
+- **When** The user runs a spec-create run
+- **Then** The user sees an error, and no new subfolder of `specs` and no `spec.md` is written
 
-Sources: `docs/briefs/orchestrator-spec-agent.md` › Der Orchestrator zeigt eine minimale TUI, die beschreibt, was gerade passiert.
+Sources: `specs/001-orchestrator-spec-agent/answers.md` › noting is written, the user will see the error
 
-### AC-016: Missing specs folder is created
+### AC-017: User interruption writes nothing
 
-- **Given** a project root without a `specs` folder
-- **When** a spec-agent run completes successfully
-- **Then** a `specs` folder exists in the project root and contains the new numbered subfolder with spec.md
+- **Given** A spec-create run in which the spec agent is still running
+- **When** The user interrupts the run (e.g. Ctrl+C)
+- **Then** The user sees that the run was aborted, and no new subfolder of `specs` and no `spec.md` is written
 
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › if the folder doesn't exist, create it; `specs/001-orchestrator-spec-agent/answers.md` › in the project root
+Sources: `specs/001-orchestrator-spec-agent/answers.md` › noting is written, the user will see the error
 
-Open questions: Q-08
+### AC-018: No questions are asked during a spec-create run
 
-### AC-017: First spec folder is numbered 001
-
-- **Given** a `specs` folder without any numbered subfolder
-- **When** a spec-agent run completes successfully
-- **Then** the new subfolder's name starts with `001-`
-
-Sources: `docs/briefs/orchestrator-spec-agent.md` › (z. B. `001-spec-inhalt`); `specs/001-orchestrator-spec-agent/answers.md` › 3 digits may be enough, but the number may grow past 999
-
-### AC-018: Next number follows the highest existing number, ignoring gaps
-
-- **Given** a `specs` folder with subfolders `001-a` and `003-b`
-- **When** a spec-agent run completes successfully
-- **Then** the new subfolder's name starts with `004-`
-
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › no gap detection, just use the next number
-
-### AC-019: Empty numbered folders count for numbering
-
-- **Given** a `specs` folder with subfolders `001-a` (containing spec.md) and `002-b` (empty)
-- **When** a spec-agent run completes successfully
-- **Then** the new subfolder's name starts with `003-`
-
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › no matter if a folder is empty, use the next number
-
-### AC-020: Subfolders without a number are ignored
-
-- **Given** a `specs` folder with subfolders `001-a` and `drafts`
-- **When** a spec-agent run completes successfully
-- **Then** the new subfolder's name starts with `002-` and `drafts` is unchanged
-
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › subfolders without a number are ignored
-
-### AC-021: Numbering grows past 999
-
-- **Given** a `specs` folder whose highest numbered subfolder is `999-a`
-- **When** a spec-agent run completes successfully
-- **Then** the new subfolder's name starts with `1000-`
-
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › 3 digits may be enough, but the number may grow past 999
-
-### AC-022: Folder name part after the number is a short dashed name
-
-- **Given** a successful spec-agent run
-- **When** the new subfolder is created
-- **Then** the part of its name after the number and the first dash consists of 2 to 4 words of lowercase letters or digits, joined by single dashes
-
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › the part after the number is 2–4 lowercase words joined by dashes that capture the change, in action-noun form where possible (e.g. "brief-to-spec", "fix-payment-timeout"). Keep technical terms and acronyms.
-
-### AC-023: Two simultaneous runs do not interfere
-
-- **Given** a project and two different valid briefs
-- **When** the user starts the spec-agent command for both briefs at the same time
-- **Then** both runs complete with two different numbered subfolders, each containing its own spec.md derived from its own brief, and the `.doppelblind` records of the two runs are kept apart
-
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › two runs in the same project must not interfere with each other; `specs/001-orchestrator-spec-agent/answers.md` › the two specs could be written simultaneously
-
-Open questions: Q-19, Q-20
-
-### AC-024: Spec is written in English
-
-- **Given** a brief written in German
-- **When** a spec-agent run completes successfully
-- **Then** title, criteria, wishes and open questions in spec.md are written in English
-
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › currently everything should be English
-
-### AC-025: Open questions are not answered during the run
-
-- **Given** a brief whose spec will contain open questions
-- **When** the spec-agent command runs
-- **Then** the user is not asked to answer any open question during the run; the open questions appear only in spec.md
+- **Given** A spec-create run whose spec agent returns open questions
+- **When** The run proceeds from start until `spec.md` is written
+- **Then** The orchestrator does not ask the user in the terminal to answer any of those open questions during that run
 
 Sources: `docs/briefs/orchestrator-spec-agent.md` › Die offenen Fragen werden nicht während des Laufs beantwortet.
 
-### AC-026: Orchestrator does not commit
+Unanswered: Q-27
 
-- **Given** a project under version control with a clean working tree
-- **When** a spec-agent run completes successfully
-- **Then** no new commit exists; the created spec folder is present as an uncommitted change
+### AC-019: No role other than the spec agent is started
 
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › for now the user commits the changes. committing without the user is part of OUT-13
+- **Given** A run of the full-flow command on a brief
+- **When** The run ends
+- **Then** The run record in the project's `.doppelblind` folder shows only spec agent runs, and no test author, implementer, verifier, classifier or worst-case agent was started
 
-### AC-027: Run is recorded in the .doppelblind folder
+Sources: `docs/briefs/orchestrator-spec-agent.md` › Es werden keine anderen Rollen gestartet.
 
-- **Given** a project and a valid brief
-- **When** a spec-agent run ends
-- **Then** the project's `.doppelblind` folder contains the run's state, its logs, and the input given to and the output returned by the spec agent
+### AC-020: Run state, logs and spec agent input and output are recorded
 
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › run state and logs, as well as input and output of the run, should be recorded and placed in a `.doppelblind` folder for later analysis; `docs/product.md` › Every run records its state, its logs and the input and output of every role in the project's .doppelblind folder, for later analysis.
+- **Given** A spec-create run, successful or failed
+- **When** The run ends
+- **Then** The project's `.doppelblind` folder contains the run's state, its logs, and the input given to and the output returned by the spec agent
 
-Open questions: Q-20
+Sources: `docs/product.md` › Every run records its state, its logs and the input and output of every role in the project's .doppelblind folder
 
-### AC-028: Time and cost limits can be set at start and have defaults
+### AC-021: Brief and binding sources are not changed by a run
 
-- **Given** a valid brief
-- **When** the user starts a run once without setting limits and once setting a time limit and a cost limit
-- **Then** the run without limits starts using default limits; the run with limits applies the values the user set
+- **Given** A project with a brief and binding sources, whose contents are noted before the run
+- **When** A spec-create run ends, successfully or not
+- **Then** The brief and every binding source are byte-for-byte unchanged
 
-Sources: `docs/product.md` › I can set the time and cost limits when I start a run.; `specs/001-orchestrator-spec-agent/answers.md` › everything should be configurable at least. the user should set those values, with reasonable defaults.
+Sources: `docs/product.md` › Sources are written only by people.; `specs/001-orchestrator-spec-agent/answers.md` › everything, it is mandatory per product.md invariant
 
-Open questions: Q-16, Q-17
+### AC-022: Spec is written in English for a non-English brief
 
-### AC-029: Reaching the cost limit lets the user continue with a new limit
+- **Given** A brief written in German
+- **When** A spec-create run succeeds
+- **Then** The criteria, wishes and open questions in `spec.md` are written in English
 
-- **Given** a run whose cost limit is reached before the spec agent finishes
-- **When** the limit is reached
-- **Then** the user is informed that the cost limit was reached and can accept a new cost limit, after which the run continues; nothing continues without the user's decision
+Sources: `specs/001-orchestrator-spec-agent/answers.md` › output should be in english for now
 
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › for example for the cost of a run, the user could say: go on.; `docs/product.md` › At a limit, a human decides; nothing is approved automatically by waiting.
+### AC-023: At a limit the user is asked in the terminal
 
-Open questions: Q-17, Q-18
+- **Given** A spec agent run that reaches its time or cost limit
+- **When** The limit is reached
+- **Then** The orchestrator asks the user in the terminal and offers to increase the cost budget or to increase the wait time
 
-### AC-030: Refinement re-runs the spec agent on brief, sources and answers
+Sources: `specs/001-orchestrator-spec-agent/answers.md` › the user can decide on cost budget increase or wait time increase; `specs/001-orchestrator-spec-agent/answers.md` › the user will be asked by the orcehstrator and can answer it in terminal
 
-- **Given** a spec folder whose open questions the user has answered
-- **When** the user runs the complete-flow command for that feature
-- **Then** the spec agent runs again; its recorded input contains the brief, the sources and all answers so far, and does not contain the spec.md of the prior round
+Unanswered: Q-37
 
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › the orchestrator should check for the answers and give them to the spec agent again, so the spec agent can generate a new specification; `specs/001-orchestrator-spec-agent/answers.md` › the brief and the sources are passed along with the answers, but not the spec from the prior turn; `docs/product.md` › Specs themselves are not sources, because a model writes them.
+### AC-024: Turn count cannot be changed at a limit
 
-Open questions: Q-01, Q-03, Q-04, Q-05, Q-06
+- **Given** A spec agent run that has reached a limit and the orchestrator asking the user
+- **When** The user reads the choices offered
+- **Then** No choice to change the turn count is offered
 
-### AC-031: Refinement replaces the spec in the same folder
+Sources: `specs/001-orchestrator-spec-agent/answers.md` › the turn count shouldn't be changed mid run
 
-- **Given** a spec folder `00N-name` whose open questions the user has answered
-- **When** a refinement round completes successfully
-- **Then** the spec.md in that folder is replaced by the new spec and no new numbered spec folder is created
+### AC-025: Nothing continues by waiting at a limit
 
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › then the spec and the answers should be replaced
+- **Given** A spec agent run that has reached a limit and the orchestrator asking the user
+- **When** The user gives no answer
+- **Then** The run does not continue and no `spec.md` is written until the user answers
 
-Open questions: Q-01, Q-03, Q-04, Q-19
+Sources: `docs/product.md` › At a limit, a human decides; nothing is approved automatically by waiting.
 
-### AC-032: Answer `free` marks a decision as left open on purpose
+Unanswered: Q-37
 
-- **Given** the user answered an open question with `free`
-- **When** the refinement round completes
-- **Then** the new spec.md lists that decision as left open on purpose and does not contain that question again as an open question
+### AC-026: Answers written into spec.md are read
 
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › a decision deliberately left open is marked with the answer `free`
+- **Given** An existing `spec.md` in which the user has written their own text as the answer to an open question
+- **When** The user starts a clarify run for that spec
+- **Then** That question is treated as answered with the user's text and the orchestrator does not ask for it again
 
-Open questions: Q-03
+Sources: `specs/001-orchestrator-spec-agent/answers.md` › yes, part of this spec; `specs/001-orchestrator-spec-agent/answers.md` › you answer the questions manually in `spec.md`
 
-### AC-033: Spec step ends after three rounds or when no open question concerns a criterion
+Unanswered: Q-27, Q-28, Q-34, Q-35
 
-- **Given** a feature whose spec has had three spec-agent rounds, or whose latest spec has no open question that concerns a criterion
-- **When** the user runs the complete-flow command for that feature
-- **Then** the spec agent is not run again and the flow reports that the spec step has ended
+### AC-027: Clarify run offers choices for each unanswered question
 
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › the limit should be 3 turns for this refinement; `specs/001-orchestrator-spec-agent/answers.md` › the end of the turn limit for this flow step is reached, or no open question concerns any criterion
+- **Given** An existing spec with at least one open question that has no answer in `spec.md`
+- **When** The user starts a clarify run for that spec
+- **Then** For each unanswered question the orchestrator asks in the terminal and offers exactly these choices: `free`, `out of scope`, stop to answer later, and finish the spec step
 
-Open questions: Q-01, Q-02
+Sources: `docs/product.md` › For each, I choose free, out of scope, to stop and answer it later, or to finish the spec step; `specs/001-orchestrator-spec-agent/answers.md` › start the flow again and mark unanswered question with `free` or `out of scope`
 
-### AC-034: Round limit cannot be extended
+Unanswered: Q-27, Q-28
 
-- **Given** a feature whose spec step has reached the limit of three rounds
-- **When** the user tries to continue the spec step
-- **Then** the user is not offered an option to raise the round limit and no fourth spec-agent round runs
+### AC-028: Choosing free or out of scope records it as the answer
 
-Sources: `specs/001-orchestrator-spec-agent/answers.md` › the limit of runs should not be made broader, because this will not result in better output.
+- **Given** A clarify run asking for an unanswered question
+- **When** The user chooses `free` (or `out of scope`)
+- **Then** The question's answer is recorded as `free` (or `out of scope`) and is included among the answers given to any later spec agent run
 
-Open questions: Q-02
+Sources: `docs/product.md` › An answer is only what I chose: my own text, `free` (left open on purpose, nobody tests it) or `out of scope` (not part of this change).
+
+Unanswered: Q-30, Q-36
+
+### AC-029: Choosing stop leaves questions open for later
+
+- **Given** A clarify run asking for an unanswered question
+- **When** The user chooses to stop
+- **Then** The run ends, that question and every remaining unanswered question are not recorded as `unanswered`, and a later clarify run asks for them again
+
+Sources: `docs/product.md` › to stop and answer it later
+
+Unanswered: Q-36
+
+### AC-030: Choosing finish marks remaining questions unanswered and ends the spec step
+
+- **Given** A clarify run in which at least one question is still unanswered
+- **When** The user chooses to finish
+- **Then** That question and every other still unanswered question are recorded as `unanswered`, the spec agent is not started again, and the spec step ends
+
+Sources: `specs/001-orchestrator-spec-agent/answers.md` › If you `finish` the clarify run while any question is unanswered, those questions will be marked `unanswered` and the spec-agent is finished.; `docs/product.md` › which records it and every unanswered question as `unanswered`
+
+Unanswered: Q-31
+
+### AC-031: Unanswered is never an answer given to the spec agent
+
+- **Given** A question recorded as `unanswered` by the orchestrator
+- **When** A later spec agent run starts for any brief in the project
+- **Then** The spec agent's recorded input does not contain that question with `unanswered` or any other value as its answer
+
+Sources: `docs/product.md` › That a question stayed unanswered is recorded by the orchestrator, never written as an answer and never given to the spec agent.
+
+Unanswered: Q-31
+
+### AC-032: When all questions are answered the user decides about another run
+
+- **Given** A clarify run in which every open question of the spec has an answer
+- **When** The last question is answered
+- **Then** The orchestrator asks the user in the terminal whether another spec-create run starts or the spec agent stops
+
+Sources: `specs/001-orchestrator-spec-agent/answers.md` › If all questions are answered, you decide whether another spec-create run starts
+
+Unanswered: Q-27
+
+### AC-033: Another spec-create run uses brief, sources and every answer so far
+
+- **Given** A spec whose questions have been answered and the user chose to start another spec-create run
+- **When** The spec agent runs again
+- **Then** The spec agent's recorded input contains the brief, the binding sources and every answer given so far
+
+Sources: `specs/001-orchestrator-spec-agent/answers.md` › Spec-create run: the spec agent writes the spec and open questions afresh from the brief, the sources and every answer so far.
+
+Unanswered: Q-28, Q-29, Q-30
+
+### AC-034: Another spec-create run never sees an earlier spec
+
+- **Given** A brief with an earlier `spec.md` and the user chose to start another spec-create run
+- **When** The spec agent runs again
+- **Then** The spec agent's recorded input does not contain the content of the earlier `spec.md` or of any other `spec.md` in `specs`
+
+Sources: `docs/product.md` › never on its earlier spec and never told how many runs came before; `docs/product.md` › Specs themselves are not sources
+
+Unanswered: Q-28, Q-29, Q-30
+
+### AC-035: Another spec-create run is not told how many runs came before
+
+- **Given** A brief for which at least one spec-create run has already happened
+- **When** The spec agent runs again
+- **Then** The spec agent's recorded input contains no information on how many spec-create runs came before
+
+Sources: `docs/product.md` › never on its earlier spec and never told how many runs came before
+
+### AC-036: Final run when an answer has not reached the spec agent
+
+- **Given** A spec with at least one answer given after the last spec agent run
+- **When** The user decides that no further spec-create run starts
+- **Then** The spec agent runs once more, and every open question of that run is recorded as `unanswered`
+
+Sources: `docs/product.md` › If an answer has not reached the spec agent yet, it runs once more, and its open questions are answered as `unanswered`.
+
+Unanswered: Q-29, Q-31
+
+### AC-037: A final spec has no open question left undecided
+
+- **Given** A spec step that has ended (finished or stopped by the user's decision of no further run)
+- **When** The user inspects the recorded state of each open question of the final spec
+- **Then** Every open question is recorded as `free`, `out of scope` or `unanswered`
+
+Sources: `docs/product.md` › Every open question is then left open, out of scope or unanswered.
+
+Unanswered: Q-31
 
 ## Wishes
 
 - Ein nettes Logo/Figlet vorweg in der TUI.
 - Ggf. ein LLM zu Rate ziehen, um meine Antworten auf die offenen Fragen in das Dokument einzuarbeiten.
+- a titel and a short description of the feature and the use case would be nice to have (probably more a wish than a testable feature)
 
 ## Left open
 
-- The exact CLI command syntax (program name, subcommands, argument syntax) is left open.
-- What .doppelblind.conf must contain for this outcome and what happens when it is missing or invalid is left open.
-- What is shown, what is created and which exit status is returned when the spec agent fails, times out or returns unusable output is left open.
-- What happens when the time limit of a run is reached is left open.
-- What exactly the TUI shows (steps, progress, elapsed time, cost, result, spec location) is left open.
-- The exit status of the command on success and on each kind of failure is left open.
+- Q-05: What should happen when the project has no `.doppelblind.conf`, or the file is invalid or declares no binding sources?
+- Q-06: What does `.doppelblind.conf` need to contain for this change (for example how binding sources are declared and which paths the spec agent may write), and in which format?
+- Q-13: Does the orchestrator itself check the spec agent's citations (that each cited path is a declared binding source and that the anchor appears verbatim in it), and what happens if a citation fails that check?
+- Q-15: How does the user set the time and cost limits when starting a run, what applies when none are given, and in which unit is cost measured given that the agent runs under a subscription rather than per-token billing?
+- Q-17: Which steps or states must the TUI show, what else must it display, and what is shown when the run ends successfully or fails?
+- Q-19: What is the layout of the `.doppelblind` folder (where a run's state, logs and the spec agent's input and output are stored, and how runs are told apart), and is that folder meant to be versioned?
+- Q-20: Where do the spec agent's prompt and output schema come from, given that they must not live in the project's tree, and how should a test check that from the outside, given that the role's input is recorded in the project's `.doppelblind` folder?
+- Q-25: What exit status should the command return on success and on each kind of failure?
+
+## Out of scope
+
+- Q-18: How should the command behave when it is not run in an interactive terminal (for example in a pipe or CI)?
+- Q-22: Which model does the spec agent run with in this change, and can the user choose it?
+- Q-24: What should happen when the brief is empty or lacks sections such as the outcome or the walkthrough?
+- Q-26: How will you tell that this change is done: which run on which brief in which project counts as the acceptance check?
+
+## Unanswered
+
+- Q-27: Which steps does each of the two commands cover? In particular: does the full-flow command go on into the clarify loop (asking about unanswered questions, deciding about another spec-create run) in the same invocation, and does the spec-step command run only one spec-create run, only a clarify run, or something else?
+- Q-28: How does the user tell the orchestrator which existing spec a clarify run or another spec-create run is for (for example by the brief path, by the spec folder, or otherwise), and how does the orchestrator know that a brief already has a spec?
+- Q-29: When another spec-create run starts for a brief that already has a spec, where is the new spec written (into the existing subfolder, into a new numbered subfolder, or elsewhere), and what happens to the earlier `spec.md` and the answers the user wrote into it?
+- Q-30: Where and in what form are the user's answers stored so that they reach later spec agent runs, given that the user writes them into `spec.md` and that `spec.md` must not be given to the spec agent?
+- Q-31: Where does the orchestrator record that a question stayed `unanswered`, and is that record visible to the user in `spec.md` or elsewhere?
+- Q-32: How is the project root determined: is it always the current directory, or is it found another way (for example by searching upward for `.doppelblind.conf`)?
+- Q-33: What happens when the given brief path resolves to a file outside the current project?
+- Q-34: What exact layout must `spec.md` have, and how is the place for each answer marked so that the user can write into it and the orchestrator can tell an answered from an unanswered question (including how `free` and `out of scope` are written there)? Should a spec template be used for this, and if so, where does it live?
+- Q-35: What happens at a clarify run when `spec.md` is missing, cannot be parsed, or the user changed parts of it other than the answers?
+- Q-36: When the user chooses to stop in a clarify run, are the `free` and `out of scope` choices already made earlier in that same run kept?
+- Q-37: When a limit is reached, how does the user enter the new cost budget or wait time, and what happens if the user declines both increases or enters an invalid value?
+- Q-38: Who determines the text after the number in the spec subfolder name (the spec agent, the orchestrator, or the user), and what happens if that text does not match the required format?
+- Q-39: What number does the first spec subfolder get when `specs` contains no subfolder with a three-digit number?
+- Q-40: What happens when the highest existing number is already 999?
 
 ## Open questions
 
-### Q-01
-
-How does the complete-flow command know which feature it should continue (for example, when answers have been given in an existing spec folder), and what does it do when it is started with a brief for which a spec folder already exists?
-
-_Context: Steps 1 and 6: starting the flow, and continuing it after the user has answered the open questions._
-
-**Answer:**
-
-
-### Q-02
-
-Does the first spec-agent run on a brief count as one of the three rounds, or are the three rounds counted only for refinements after it?
-
-_Context: Refining the spec after the open questions have been answered._
-
-**Answer:**
-
-
-### Q-03
-
-Where does the user write the answers to the open questions: inside spec.md (as the brief's step 6 says) or in a separate answers file in the spec folder, and what is the required format so the orchestrator can find each answer and the question it belongs to?
-
-_Context: Step 6: the user opens spec.md and answers the open questions there._
-
-**Answer:**
-
-
-### Q-04
-
-What does 'the spec and the answers should be replaced' mean for the answers: are earlier rounds' answers kept so that all answers so far are passed to the next round, and where are they kept?
-
-_Context: Refining the spec after the open questions have been answered._
-
-_Depends on: Q-03_
-
-**Answer:**
-
-
-### Q-05
-
-What happens when the user starts a refinement while some open questions are still unanswered?
-
-_Context: Refining the spec after the open questions have been answered._
-
-_Depends on: Q-03_
-
-**Answer:**
-
-
-### Q-06
-
-How does the orchestrator decide which files are passed to the spec agent as binding sources, and which files count as 'code' that the spec agent must not see?
-
-_Context: Step 3: the orchestrator gives the brief to the spec agent._
-
-**Answer:**
-
-
-### Q-07
-
-Must the rule that the spec agent cannot read code and cannot write files be enforced technically in this outcome (so that it holds even if the agent ignores its instructions), or is an instruction to the agent sufficient for now?
-
-_Context: Step 3: the spec agent produces the specification._
-
-**Answer:**
-
-
-### Q-08
-
-How is the project root determined (for example from the current directory, from the location of .doppelblind.conf, or otherwise), and what happens when the command is run outside any project?
-
-_Context: Steps 2 and 5: the brief path and the location of the specs folder._
-
-**Answer:**
-
-
-### Q-09
-
-Is an absolute brief path that points to a file inside the project accepted?
-
-_Context: Step 2: the brief is passed as a path._
-
-**Answer:**
-
-
-### Q-10
-
-Is a brief path accepted if a directory along the path (not the file itself) is a symlink?
-
-_Context: Step 2: the brief is passed as a path._
-
-**Answer:**
-
-
-### Q-11
-
-What happens when the brief file is empty, or is not a text file?
-
-_Context: Step 2: the brief is passed as a path._
-
-**Answer:**
-
-
-### Q-12
-
-Where does the spec template live, who provides its initial version, and what happens when it is missing or cannot be used?
-
-_Context: Step 3: the spec agent produces the specification._
-
-**Answer:**
-
-
-### Q-13
-
-What must the spec template contain and what may the user change in it, given that the orchestrator must still validate the agent's output against a fixed schema?
-
-_Context: Step 3: the spec agent produces the specification._
-
-_Depends on: Q-12_
-
-**Answer:**
-
-
-### Q-14
-
-Besides schema validation, must the orchestrator check citations itself (for example, that every cited path is one of the sources passed and every anchor appears verbatim in that source), and what happens when a citation fails that check?
-
-_Context: Step 3: the spec agent produces criteria that each cite a source._
-
-**Answer:**
-
-
-### Q-15
-
-What happens when a brief path is rejected or the brief cannot be read: besides the error message, is anything created (spec folder, .doppelblind records)?
-
-_Context: Step 2: the brief is passed as a path._
-
-**Answer:**
-
-
-### Q-16
-
-What are the default values of the time limit and the cost limit, and how does the user set them (on the command line, in .doppelblind.conf, or both, and which wins)?
-
-_Context: Running the spec agent within the limits of a run._
-
-**Answer:**
-
-
-### Q-17
-
-How is the cost of a run measured, given that agents run under a subscription rather than a per-token API key?
-
-_Context: Running the spec agent within the limits of a run._
-
-**Answer:**
-
-
-### Q-18
-
-What happens when the user declines to accept a new cost limit after the limit was reached?
-
-_Context: Running the spec agent within the limits of a run._
-
-**Answer:**
-
-
-### Q-19
-
-What happens when two refinement runs for the same spec folder are started at the same time?
-
-_Context: Refining the spec after the open questions have been answered._
-
-**Answer:**
-
-
-### Q-20
-
-How are the records in the .doppelblind folder organised (for example one folder per run), and in which format are state, logs, input and output stored?
-
-_Context: Recording the run for later analysis._
-
-**Answer:**
-
-
-### Q-21
-
-Which model does the spec agent run with in this outcome, and can the user choose it?
-
-_Context: Step 3: the orchestrator gives the brief to the spec agent._
-
-**Answer:**
+None.
