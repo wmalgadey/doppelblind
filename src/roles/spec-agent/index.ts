@@ -20,6 +20,8 @@ export interface OpenQuestion {
   id: string;
   question: string;
   context?: string;
+  /** IDs of the questions whose answers this one depends on. */
+  depends_on?: string[];
 }
 
 /** The spec agent's output, as its schema describes it. */

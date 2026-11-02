@@ -5,15 +5,24 @@ import { renderSpec } from "../src/spec/render.ts";
 import { sampleSpec } from "./helpers.ts";
 
 describe("answers", () => {
-  test("readAnswers reads answered questions and skips empty answers", () => {
+  test("readAnswers reads answered questions without their context lines", () => {
     const spec = sampleSpec({
       open_questions: [
-        { id: "Q-01", question: "Which words?", context: "AC-01" },
-        { id: "Q-02", question: "Which colour?" },
+        { id: "Q-01", question: "Which words?", context: "AC-001" },
+        { id: "Q-02", question: "Which colour?", depends_on: ["Q-01"] },
       ],
     });
-    const md = renderSpec(spec, "b.md", "b.md").replace("**Answer:**\n", "**Answer:**\n\nHello.\n\nAnd welcome.\n");
-    assert.deepEqual(readAnswers(md), [{ id: "Q-01", question: "Which words?", answer: "Hello.\n\nAnd welcome." }]);
+    const md = renderSpec(spec, "b.md", "b.md")
+      .replace("**Answer:**\n", "**Answer:**\n\nHello.\n\nAnd welcome.\n")
+      .replace(/\*\*Answer:\*\*\n$/, "**Answer:**\n\nBlue.\n");
+    assert.deepEqual(readAnswers(md), [
+      { id: "Q-01", question: "Which words?", answer: "Hello.\n\nAnd welcome." },
+      { id: "Q-02", question: "Which colour?", answer: "Blue." },
+    ]);
+  });
+
+  test("readAnswers skips questions with an empty answer", () => {
+    assert.deepEqual(readAnswers(renderSpec(sampleSpec(), "b.md", "b.md")), []);
   });
 
   test("an answer on the same line as its mark is read", () => {

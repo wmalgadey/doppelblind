@@ -23,7 +23,7 @@
         "additionalProperties": false,
         "required": ["id", "title", "given", "when", "then", "sources"],
         "properties": {
-          "id": { "type": "string", "pattern": "^AC-[0-9]{2,}$" },
+          "id": { "type": "string", "pattern": "^AC-[0-9]{3,}$" },
           "title": { "type": "string", "minLength": 1 },
           "given": { "type": "string", "minLength": 1 },
           "when": { "type": "string", "minLength": 1 },
@@ -57,7 +57,11 @@
         "properties": {
           "id": { "type": "string", "pattern": "^Q-[0-9]{2,}$" },
           "question": { "type": "string", "minLength": 1 },
-          "context": { "type": "string" }
+          "context": { "type": "string" },
+          "depends_on": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^Q-[0-9]{2,}$" }
+          }
         }
       }
     }

@@ -25,6 +25,8 @@ describe("gates", () => {
       { ...sampleSpec(), extra: true },
       sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], sources: [] }] }),
       sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], id: "1" }] }),
+      sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], id: "AC-01" }] }),
+      sampleSpec({ open_questions: [{ id: "Q-01", question: "?", depends_on: ["2"] }] }),
       sampleSpec({ open_questions: [{ id: "Q1", question: "?" }] }),
       sampleSpec({ short_name: "Not A Slug" }),
       sampleSpec({ short_name: "single" }),
@@ -51,18 +53,27 @@ describe("gates", () => {
 
   test("citing a path that is not a binding source fails", () => {
     const spec = sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], sources: [{ path: "src/cli.ts", anchor: "main" }] }] });
-    assert.deepEqual(checkSpec(spec, sources), ["AC-01 cites src/cli.ts, which is not a binding source."]);
+    assert.deepEqual(checkSpec(spec, sources), ["AC-001 cites src/cli.ts, which is not a binding source."]);
   });
 
   test("citing an anchor that does not appear in the source fails", () => {
     const spec = sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], sources: [{ path: "docs/product.md", anchor: "OUT-99" }] }] });
-    assert.deepEqual(checkSpec(spec, sources), ['AC-01 cites "OUT-99" in docs/product.md, which does not appear there.']);
+    assert.deepEqual(checkSpec(spec, sources), ['AC-001 cites "OUT-99" in docs/product.md, which does not appear there.']);
   });
 
   test("duplicate IDs fail", () => {
     const c = sampleSpec().criteria[0];
     const q = sampleSpec().open_questions[0];
     const spec = sampleSpec({ criteria: [c, c, c], open_questions: [q, q] });
-    assert.deepEqual(checkSpec(spec, sources), ["Duplicate criterion ID AC-01.", "Duplicate open question ID Q-01."]);
+    assert.deepEqual(checkSpec(spec, sources), ["Duplicate criterion ID AC-001.", "Duplicate open question ID Q-01."]);
+  });
+
+  test("a question may depend only on another question of the spec", () => {
+    const q = (id: string, depends_on: string[]) => ({ id, question: "?", depends_on });
+    const spec = sampleSpec({ open_questions: [q("Q-01", ["Q-02", "Q-07"]), q("Q-02", ["Q-02"]), q("Q-03", ["Q-05"])] });
+    assert.deepEqual(checkSpec(spec, sources, ["Q-05"]), [
+      "Open question Q-01 depends on Q-07, which is not a question of this spec.",
+      "Open question Q-02 depends on itself.",
+    ]);
   });
 });

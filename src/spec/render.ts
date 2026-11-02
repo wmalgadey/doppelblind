@@ -30,6 +30,7 @@ export function renderSpec(spec: SpecOutput, briefPath: string, briefLink: strin
   for (const q of spec.open_questions) {
     lines.push(`### ${q.id}`, "", q.question, "");
     if (q.context) lines.push(`_Context: ${q.context}_`, "");
+    if (q.depends_on?.length) lines.push(`_Depends on: ${q.depends_on.join(", ")}_`, "");
     lines.push("**Answer:**", "", "");
   }
 

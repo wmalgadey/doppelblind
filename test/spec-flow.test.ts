@@ -35,7 +35,7 @@ describe("spec-flow", () => {
     assert.equal(result.criteria, 1);
     assert.equal(result.openQuestions, 1);
     const md = readFileSync(result.specFile, "utf8");
-    assert.match(md, /### AC-01: Greeter greets/);
+    assert.match(md, /### AC-001: Greeter greets/);
     assert.match(md, /\[docs\/briefs\/greeting.md\]\(\.\.\/\.\.\/docs\/briefs\/greeting.md\)/);
 
     assert.equal(calls.length, 1);
@@ -145,7 +145,7 @@ describe("spec-flow", () => {
     const spec = sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], sources: [{ path: "src/secret.ts", anchor: "implementation" }] }] });
     await assert.rejects(
       runSpecFlow({ cwd: root, brief: "docs/briefs/greeting.md", ui: recordingUi(), agent: fakeAgent(spec) }),
-      (err: DoppelblindError) => err.details.includes("AC-01 cites src/secret.ts, which is not a binding source."),
+      (err: DoppelblindError) => err.details.includes("AC-001 cites src/secret.ts, which is not a binding source."),
     );
     assert.ok(!existsSync(path.join(root, "specs")));
   });

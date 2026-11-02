@@ -51,7 +51,7 @@ export function sampleSpec(overrides: Partial<SpecOutput> = {}): SpecOutput {
     short_name: "greet-everyone",
     criteria: [
       {
-        id: "AC-01",
+        id: "AC-001",
         title: "Greeter greets",
         given: "the greeter is installed",
         when: "I run it",
@@ -60,7 +60,7 @@ export function sampleSpec(overrides: Partial<SpecOutput> = {}): SpecOutput {
       },
     ],
     wishes: ["A colourful greeting."],
-    open_questions: [{ id: "Q-01", question: "Which words does the greeting use?", context: "AC-01" }],
+    open_questions: [{ id: "Q-01", question: "Which words does the greeting use?", context: "AC-001" }],
     ...overrides,
   };
 }

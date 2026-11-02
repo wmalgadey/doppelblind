@@ -19,7 +19,7 @@ export function readAnswers(markdown: string): AnsweredQuestion[] {
     if (mark < 0) continue;
     const answer = body.slice(mark + ANSWER_MARK.length).trim();
     if (answer === "") continue;
-    const question = body.slice(0, mark).replace(/^_Context: .*_$/m, "").trim();
+    const question = body.slice(0, mark).replace(/^_(Context|Depends on): .*_$/gm, "").trim();
     answered.push({ id: parts[i], question, answer });
   }
   return answered;
