@@ -3,7 +3,9 @@ import path from "node:path";
 import type { SpecOutput } from "../roles/spec-agent/index.ts";
 import { DoppelblindError } from "../errors.ts";
 
-export const STATE_FILE = ".doppelblind/specs.json";
+/** The project's run state: recorded briefs and the run folders of every agent run. */
+export const STATE_DIR = ".doppelblind";
+export const STATE_FILE = `${STATE_DIR}/specs.json`;
 
 /** `final` once the spec step has ended; otherwise `ready` or `open`, computed from the spec, never stored. */
 export type SpecStatus = "ready" | "open" | "final";

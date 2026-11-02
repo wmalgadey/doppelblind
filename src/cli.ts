@@ -2,7 +2,7 @@
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { DoppelblindError } from "./errors.ts";
-import { runSpecFlow } from "./flow/spec-flow.ts";
+import { DEFAULT_BUDGET_USD, DEFAULT_TIMEOUT_MIN, runSpecFlow } from "./flow/spec-flow.ts";
 import { terminalUi } from "./tui.ts";
 
 const USAGE = `Usage: doppelblind <command> <brief>
@@ -14,8 +14,8 @@ Commands:
 <brief> is a path relative to the current directory.
 
 Options:
-  --timeout <min>   Time limit for the agent run in minutes (default: 15)
-  --budget <usd>    Cost limit for the agent run in USD (default: 5)
+  --timeout <min>   Time limit for the agent run in minutes (default: ${DEFAULT_TIMEOUT_MIN})
+  --budget <usd>    Cost limit for the agent run in USD (default: ${DEFAULT_BUDGET_USD})
   -h, --help        Show this help
 
 Environment:
@@ -47,8 +47,8 @@ async function main(argv: string[]): Promise<number> {
     cwd: process.cwd(),
     brief,
     ui,
-    timeoutMs: positiveNumber("--timeout", values.timeout, 15) * 60_000,
-    maxBudgetUsd: positiveNumber("--budget", values.budget, 5),
+    timeoutMs: positiveNumber("--timeout", values.timeout, DEFAULT_TIMEOUT_MIN) * 60_000,
+    maxBudgetUsd: positiveNumber("--budget", values.budget, DEFAULT_BUDGET_USD),
     clarify: command === "feature",
   });
 

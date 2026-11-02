@@ -17,10 +17,10 @@ import {
   renderAnswerLog,
   type Answer,
 } from "../spec/answers.ts";
-import { createSpecFolder } from "../spec/folder.ts";
+import { createSpecFolder, SPEC_FILE } from "../spec/folder.ts";
 import { highestQuestion, questionNumber, renumberQuestions } from "../spec/questions.ts";
 import { questionSections, renderSpec, type QuestionRecord } from "../spec/render.ts";
-import { readState, specStatus, STATE_FILE, writeState, type BriefState, type SpecStatus } from "../spec/state.ts";
+import { readState, specStatus, STATE_DIR, STATE_FILE, writeState, type BriefState, type SpecStatus } from "../spec/state.ts";
 import type { Ui } from "../tui.ts";
 
 export interface SpecFlowOptions {
@@ -56,6 +56,9 @@ export interface SpecFlowResult {
 /** The validated output of a spec-agent run with its questions renumbered for the brief, kept in its run folder. */
 const OUTPUT_FILE = "output.json";
 
+export const DEFAULT_TIMEOUT_MIN = 15;
+export const DEFAULT_BUDGET_USD = 5;
+
 const ANOTHER_SPEC_CREATE_RUN = "Start another spec-create run?";
 const STOP = "stop";
 const FINISH = "finish";
@@ -82,13 +85,13 @@ export async function runSpecFlow(options: SpecFlowOptions): Promise<SpecFlowRes
   }, (r) => r.briefPath);
 
   const sources = await step(ui, "Loading binding sources", () => loadSources(contract, briefPath),
-    (s) => s.all.filter((x) => x !== s.brief).map((x) => x.path).join(", ") || "brief only");
+    (s) => s.others.map((x) => x.path).join(", ") || "brief only");
   for (const p of sources.missing) ui.note(`declared source not found, skipped: ${p}`);
 
   const ctx = { root: contract.root, specsDir: path.join(contract.root, contract.specs), briefPath, sources, options };
   const recorded = readState(contract.root)[briefPath];
   if (recorded?.final) {
-    throw new DoppelblindError(`The spec step of ${briefPath} is final; no further spec-create run starts.`, [`Spec: ${recorded.folder}/spec.md`]);
+    throw new DoppelblindError(`The spec step of ${briefPath} is final; no further spec-create run starts.`, [`Spec: ${recorded.folder}/${SPEC_FILE}`]);
   }
   const previous = recorded && readPrevious(contract.root, briefPath, recorded.folder);
   if (!previous || !options.clarify) {
@@ -107,7 +110,12 @@ export async function runSpecFlow(options: SpecFlowOptions): Promise<SpecFlowRes
  */
 async function clarify(ctx: Context, recorded: BriefState, previous: Previous): Promise<SpecFlowResult> {
   const { ui } = ctx.options;
-  const last = readOutput(ctx.root, ctx.briefPath, recorded);
+  const last = readOutput(ctx.root, recorded);
+  if (!last) {
+    throw new DoppelblindError(`No output of the last spec-agent run is recorded for ${ctx.briefPath}.`, [
+      `Run \`doppelblind spec ${ctx.briefPath}\` for another spec-create run first.`,
+    ]);
+  }
   ui.note(`clarify run: found ${previous.added} answers`);
 
   const answered = new Set(previous.answers.map((a) => a.id));
@@ -120,7 +128,7 @@ async function clarify(ctx: Context, recorded: BriefState, previous: Previous): 
   }
   let stopped: string[] = [];
   let finishing: string[] | undefined;
-  const chosen: { id: string; answer: string }[] = [];
+  const given = previous.answers.length;
   for (let i = 0; i < pending.length; i++) {
     const q = pending[i];
     const titles = q.concerns.map((id) => `${id}: ${last.criteria.find((c) => c.id === id)?.title ?? id}`);
@@ -141,18 +149,17 @@ async function clarify(ctx: Context, recorded: BriefState, previous: Previous): 
       break;
     }
     previous.answers.push({ id: q.id, question: q.question, answer: choice });
-    chosen.push({ id: q.id, answer: choice });
   }
   if (stopped.length > 0) {
+    const chosen = previous.answers.slice(given);
     if (chosen.length > 0) {
       const file = path.join(ctx.root, previous.spec.path);
       writeFileSync(file, fillAnswers(readFileSync(file, "utf8"), chosen));
       ui.note(`${chosen.length} choices written into ${previous.spec.path}`);
     }
-    const sections = questionSections(last, { answers: previous.answers, unanswered: [] });
     return {
-      ...counts(last, sections),
-      specFile: path.join(ctx.root, recorded.folder, "spec.md"),
+      ...counts(last, { answers: previous.answers, unanswered: [] }),
+      specFile: path.join(ctx.root, previous.spec.path),
       status: specStatus(last),
       stopped,
     };
@@ -173,10 +180,10 @@ async function clarify(ctx: Context, recorded: BriefState, previous: Previous): 
   const unanswered = finishing ?? [];
   const record = { answers: previous.answers, unanswered };
   writeAnswerLog(ctx.root, previous);
-  const specFile = await step(ui, "Writing spec.md", () => writeSpec(ctx, recorded.folder, last, record, previous),
-    ({ file, unchanged }) => toProjectPath(ctx.root, file) + (unchanged ? ", unchanged" : ", updated"));
+  const { file: specFile } = await step(ui, `Writing ${SPEC_FILE}`, () => writeSpec(ctx, recorded.folder, last, record, previous),
+    (written) => describeWrite(ctx.root, written, previous));
   writeState(ctx.root, ctx.briefPath, { ...recorded, final: true });
-  return { ...counts(last, questionSections(last, record)), specFile: specFile.file, status: "final", stopped: [] };
+  return { ...counts(last, record), specFile, status: "final", stopped: [] };
 }
 
 /**
@@ -188,37 +195,39 @@ async function specCreate(ctx: Context, recorded: BriefState | undefined, previo
   const answers = previous && { path: previous.answersPath, content: previous.answers.length > 0 ? renderAnswerList(previous.answers) : "" };
   const request = {
     systemPrompt: specAgent.systemPrompt,
-    userMessage: specAgent.buildUserMessage(ctx.sources.brief, ctx.sources.all, answers),
+    userMessage: specAgent.buildUserMessage(ctx.sources.brief, ctx.sources.others, answers),
     schema: specAgent.schema,
-    timeoutMs: ctx.options.timeoutMs ?? 15 * 60_000,
-    maxBudgetUsd: ctx.options.maxBudgetUsd ?? 5,
+    timeoutMs: ctx.options.timeoutMs ?? DEFAULT_TIMEOUT_MIN * 60_000,
+    maxBudgetUsd: ctx.options.maxBudgetUsd ?? DEFAULT_BUDGET_USD,
   };
   if (previous) writeAnswerLog(ctx.root, previous);
   const runDir = startRunLog(ctx.root, request.systemPrompt, request.userMessage);
   const log = toProjectPath(ctx.root, path.join(runDir, TRACE_FILE));
   ui.note(`trace: ${log}`);
 
-  const response = await step(ui, "Spec agent is writing the spec",
-    () => withLog(log, () => agent({ ...request, runDir })), describeCost);
+  const { spec, record, specFile } = await withLog(log, async () => {
+    const response = await step(ui, "Spec agent is writing the spec", () => agent({ ...request, runDir }), describeCost);
 
-  const output = await step(ui, "Validating output against schema",
-    () => withLog(log, () => validateOutput<specAgent.SpecOutput>(specAgent.schema, response.output)));
+    const output = await step(ui, "Validating output against schema",
+      () => validateOutput<specAgent.SpecOutput>(specAgent.schema, response.output));
 
-  await step(ui, "Checking criteria and citations", () => withLog(log, () => {
-    const citable = answers ? [...ctx.sources.all, answers] : ctx.sources.all;
-    const problems = checkSpec(output, citable);
-    if (problems.length > 0) throw new DoppelblindError("The spec does not pass its gates.", problems);
-  }), () => `${output.criteria.length} criteria`);
-  const used = [...(previous?.answers ?? []).map((a) => a.id), ...questionIds(ctx.root, recorded)];
-  const spec = renumberQuestions(output, highestQuestion(used));
-  writeFileSync(path.join(runDir, OUTPUT_FILE), JSON.stringify(spec, null, 2) + "\n");
+    await step(ui, "Checking criteria and citations", () => {
+      const citable = [ctx.sources.brief, ...ctx.sources.others, ...(answers ? [answers] : [])];
+      const problems = checkSpec(output, citable);
+      if (problems.length > 0) throw new DoppelblindError("The spec does not pass its gates.", problems);
+    }, () => `${output.criteria.length} criteria`);
+    const lastQuestions = readOutput(ctx.root, recorded)?.open_questions ?? [];
+    const used = [...(previous?.answers ?? []), ...lastQuestions].map((q) => q.id);
+    const spec = renumberQuestions(output, highestQuestion(used));
+    writeFileSync(path.join(runDir, OUTPUT_FILE), JSON.stringify(spec, null, 2) + "\n");
 
-  const unanswered = final ? spec.open_questions.map((q) => q.id) : [];
-  const record = { answers: previous?.answers ?? [], unanswered };
+    const unanswered = final ? spec.open_questions.map((q) => q.id) : [];
+    const record = { answers: previous?.answers ?? [], unanswered };
 
-  const { file: specFile } = await step(ui, "Writing spec.md",
-    () => withLog(log, () => writeSpec(ctx, recorded?.folder, spec, record, previous)),
-    ({ file, unchanged }) => toProjectPath(ctx.root, file) + (previous ? (unchanged ? ", unchanged" : ", updated") : ""));
+    const { file } = await step(ui, `Writing ${SPEC_FILE}`, () => writeSpec(ctx, recorded?.folder, spec, record, previous),
+      (written) => describeWrite(ctx.root, written, previous));
+    return { spec, record, specFile: file };
+  });
 
   const status = final ? "final" : specStatus(spec);
   if (status === "ready") ui.note("no open question concerns a criterion");
@@ -228,13 +237,13 @@ async function specCreate(ctx: Context, recorded: BriefState | undefined, previo
     run: toProjectPath(ctx.root, runDir),
   });
 
-  return { ...counts(spec, questionSections(spec, record)), specFile, status, stopped: [] };
+  return { ...counts(spec, record), specFile, status, stopped: [] };
 }
 
 /** Writes spec.md; refuses if spec.md changed since it was read. */
 function writeSpec(ctx: Context, recordedFolder: string | undefined, spec: specAgent.SpecOutput, record: QuestionRecord, previous?: Previous) {
   const folder = recordedFolder ? path.join(ctx.root, recordedFolder) : createSpecFolder(ctx.specsDir, spec.short_name);
-  const file = path.join(folder, "spec.md");
+  const file = path.join(folder, SPEC_FILE);
   if (previous && readFileSync(file, "utf8") !== previous.spec.content) {
     throw new DoppelblindError(`${previous.spec.path} changed while the agent was running; it was not overwritten.`, [
       "Run again to rerun with its current answers.",
@@ -246,7 +255,13 @@ function writeSpec(ctx: Context, recordedFolder: string | undefined, spec: specA
   return { file, unchanged: previous?.spec.content === markdown };
 }
 
-function counts(spec: specAgent.SpecOutput, sections: ReturnType<typeof questionSections>) {
+/** The written spec.md as a step detail: whether a rerun changed it. */
+function describeWrite(root: string, { file, unchanged }: { file: string; unchanged: boolean }, previous?: Previous): string {
+  return toProjectPath(root, file) + (previous ? (unchanged ? ", unchanged" : ", updated") : "");
+}
+
+function counts(spec: specAgent.SpecOutput, record: QuestionRecord) {
+  const sections = questionSections(spec, record);
   return {
     criteria: spec.criteria.length,
     openQuestions: sections.open.length,
@@ -275,9 +290,9 @@ interface Previous {
  * the current spec.md; an answer in spec.md replaces the one answers.md holds for the same question.
  */
 function readPrevious(root: string, brief: string, folder: string): Previous {
-  const file = path.join(root, folder, "spec.md");
+  const file = path.join(root, folder, SPEC_FILE);
   if (!existsSync(file)) {
-    throw new DoppelblindError(`${folder}/spec.md, recorded for ${brief} in ${STATE_FILE}, does not exist.`);
+    throw new DoppelblindError(`${folder}/${SPEC_FILE}, recorded for ${brief} in ${STATE_FILE}, does not exist.`);
   }
   const spec = { path: toProjectPath(root, file), content: readFileSync(file, "utf8") };
   const log = path.join(root, folder, ANSWERS_FILE);
@@ -293,21 +308,10 @@ function writeAnswerLog(root: string, previous: Previous): void {
   if (previous.answers.length > 0) writeFileSync(path.join(root, previous.answersPath), renderAnswerLog(previous.answers));
 }
 
-/** IDs of the open questions of the brief's last spec-create run, so that new ones are numbered after them. */
-function questionIds(root: string, recorded: BriefState | undefined): string[] {
+/** The validated output of the brief's last spec-agent run, from the run folder the run state records, if any. */
+function readOutput(root: string, recorded: BriefState | undefined): specAgent.SpecOutput | undefined {
   const file = recorded?.run && path.join(root, recorded.run, OUTPUT_FILE);
-  if (!file || !existsSync(file)) return [];
-  return (JSON.parse(readFileSync(file, "utf8")) as specAgent.SpecOutput).open_questions.map((q) => q.id);
-}
-
-/** The validated output of the brief's last spec-agent run, from the run folder the run state records. */
-function readOutput(root: string, brief: string, recorded: BriefState): specAgent.SpecOutput {
-  const file = recorded.run && path.join(root, recorded.run, OUTPUT_FILE);
-  if (!file || !existsSync(file)) {
-    throw new DoppelblindError(`No output of the last spec-agent run is recorded for ${brief}.`, [
-      `Run \`doppelblind spec ${brief}\` for another spec-create run first.`,
-    ]);
-  }
+  if (!file || !existsSync(file)) return undefined;
   return JSON.parse(readFileSync(file, "utf8"));
 }
 
@@ -335,7 +339,7 @@ function describeCost(response: { costUsd?: number; durationMs?: number }): stri
  * which the agent completes with its call and trace, so any run can be inspected.
  */
 function startRunLog(root: string, systemPrompt: string, userMessage: string): string {
-  const dir = path.join(root, ".doppelblind", "runs", `${new Date().toISOString().replace(/[:.]/g, "-")}-spec-agent`);
+  const dir = path.join(root, STATE_DIR, "runs", `${new Date().toISOString().replace(/[:.]/g, "-")}-spec-agent`);
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, "system-prompt.md"), systemPrompt);
   writeFileSync(path.join(dir, "input.md"), userMessage);

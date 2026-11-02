@@ -42,13 +42,12 @@ export const systemPrompt: string = readFileSync(path.join(dir, "prompt.md"), "u
 export const schema: object = JSON.parse(readFileSync(path.join(dir, "schema.json"), "utf8"));
 
 /**
- * The only input the spec agent gets: the brief, the binding sources and,
+ * The only input the spec agent gets: the brief, the other binding sources and,
  * when the brief was specified before, every answer given so far. Never an earlier spec.
  */
 export function buildUserMessage(brief: Source, sources: Source[], answers?: Source): string {
   const parts = [`<brief path="${brief.path}">\n${brief.content.trim()}\n</brief>`];
   for (const s of sources) {
-    if (s.path === brief.path) continue;
     parts.push(`<source path="${s.path}">\n${s.content.trim()}\n</source>`);
   }
   if (answers) parts.push(`<answers path="${answers.path}">\n${answers.content.trim() || "None."}\n</answers>`);
