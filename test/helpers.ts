@@ -18,12 +18,19 @@ export interface RecordingUi extends Ui {
   events: string[];
 }
 
-export function recordingUi(): RecordingUi {
+/** A UI that records what the flow reports and answers each choice with the next of `choices`. */
+export function recordingUi(choices: string[] = []): RecordingUi {
   const events: string[] = [];
   return {
     events,
     banner: () => events.push("banner"),
     note: (text) => events.push(`note: ${text}`),
+    async choose(question, options) {
+      const choice = choices.shift();
+      if (choice === undefined || !options.includes(choice)) throw new Error(`unexpected choice for "${question}": ${choice}`);
+      events.push(`choose: ${question} -> ${choice}`);
+      return choice;
+    },
     step(label): Step {
       events.push(`start: ${label}`);
       return {
@@ -61,7 +68,6 @@ export function sampleSpec(overrides: Partial<SpecOutput> = {}): SpecOutput {
     ],
     wishes: ["A colourful greeting."],
     open_questions: [{ id: "Q-01", question: "Which words does the greeting use?", concerns: ["AC-001"], context: "I run the greeter." }],
-    left_open: [],
     ...overrides,
   };
 }

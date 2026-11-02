@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "additionalProperties": false,
-  "required": ["title", "short_name", "criteria", "wishes", "open_questions", "left_open"],
+  "required": ["title", "short_name", "criteria", "wishes", "open_questions"],
   "properties": {
     "title": {
       "type": "string",
@@ -69,11 +69,6 @@
           }
         }
       }
-    },
-    "left_open": {
-      "type": "array",
-      "items": { "type": "string", "minLength": 1 },
-      "description": "Decisions the user left open on purpose, one each."
     }
   }
 }

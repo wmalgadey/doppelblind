@@ -30,7 +30,7 @@ describe("gates", () => {
       sampleSpec({ open_questions: [{ id: "Q1", question: "?", concerns: [] }] }),
       sampleSpec({ open_questions: [{ id: "Q-01", question: "?", concerns: ["1"] }] }),
       sampleSpec({ open_questions: [{ id: "Q-01", question: "?" } as never] }),
-      { ...sampleSpec(), left_open: undefined },
+      { ...sampleSpec(), left_open: [] },
       sampleSpec({ short_name: "Not A Slug" }),
       sampleSpec({ short_name: "single" }),
     ]) {

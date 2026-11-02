@@ -64,7 +64,7 @@ What the brief lists as a wish is not a criterion. List each wish separately, in
 The `<answers>` tag holds decisions the user made on earlier questions, each with the question's text and the answer. It is a source: cite it with the path of its tag and the answer's text as the anchor.
 
 - Each answer is a decision. Work it into the criteria. If it leaves something undecided or raises a new decision, ask a new open question.
-- An answer that starts with the marker for "left open on purpose" means the user leaves this decision open on purpose. The marker is the word `free`. Do not ask the question again; list the decision in `left_open`, in one sentence.
+- An answer `free` means the user leaves this decision open on purpose; an answer `out of scope` means it is not part of this change. For both, write no criterion for the decision and do not ask it again.
 
 ## Quality checks
 

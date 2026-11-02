@@ -2,13 +2,13 @@
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { DoppelblindError } from "./errors.ts";
-import { MAX_ROUNDS, runSpecFlow } from "./flow/spec-flow.ts";
+import { runSpecFlow } from "./flow/spec-flow.ts";
 import { terminalUi } from "./tui.ts";
 
 const USAGE = `Usage: doppelblind <command> <brief>
 
 Commands:
-  feature <brief>   Start the flow for a new feature (for now: spec agent only)
+  feature <brief>   Start the flow for a new feature, or continue it (for now: spec agent only)
   spec <brief>      Hand the brief to the spec agent
 
 <brief> is a path relative to the current directory.
@@ -49,17 +49,20 @@ async function main(argv: string[]): Promise<number> {
     ui,
     timeoutMs: positiveNumber("--timeout", values.timeout, 15) * 60_000,
     maxBudgetUsd: positiveNumber("--budget", values.budget, 5),
+    clarify: command === "feature",
   });
 
   const specFile = path.relative(process.cwd(), result.specFile);
   process.stderr.write(
     `\n  ${result.criteria} criteria, ${result.openQuestions} open questions.\n` +
-      `  Status: ${result.status} (round ${result.round} of ${MAX_ROUNDS})\n` +
-      (result.status === "limit reached"
-        ? "  The spec is not ready and the brief has no rounds left; no further round starts.\n"
-        : result.openQuestions > 0
-          ? `  Answer the open questions in ${specFile}, then run again.\n`
-          : "") +
+      `  Status: ${result.status} (round ${result.round})\n` +
+      (result.status === "final"
+        ? `  The spec step is final: ${result.leftOpen} questions left open, ${result.outOfScope} out of scope, ${result.unanswered} unanswered.\n`
+        : result.stopped.length > 0
+          ? `  Stopped at ${result.stopped.join(", ")}: answer them in ${specFile}, then run again.\n`
+          : result.openQuestions > 0
+            ? `  Answer the open questions in ${specFile}, then run again.\n`
+            : "") +
       "  The flow ends here: no further role exists yet.\n",
   );
   process.stdout.write(`${specFile}\n`);

@@ -34,8 +34,6 @@ export interface SpecOutput {
   criteria: Criterion[];
   wishes: string[];
   open_questions: OpenQuestion[];
-  /** Decisions the user left open on purpose. */
-  left_open: string[];
 }
 
 const dir = import.meta.dirname;

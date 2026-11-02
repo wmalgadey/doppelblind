@@ -1,4 +1,6 @@
+import { createInterface } from "node:readline";
 import { styleText } from "node:util";
+import { DoppelblindError } from "./errors.ts";
 
 export interface Step {
   done(detail?: string): void;
@@ -10,6 +12,8 @@ export interface Ui {
   banner(): void;
   step(label: string): Step;
   note(text: string): void;
+  /** Asks the user to pick one of `options` and resolves with the picked option. */
+  choose(question: string, options: string[]): Promise<string>;
 }
 
 const LOGO = [
@@ -24,10 +28,15 @@ const LOGO = [
 const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const LABEL_WIDTH = 34;
 
-/** Minimal terminal UI: a logo, then one line per step; on a TTY the running step shows a spinner. */
-export function terminalUi(stream: NodeJS.WriteStream = process.stderr): Ui {
+/**
+ * Minimal terminal UI: a logo, then one line per step; on a TTY the running step shows a spinner.
+ * Choices are read from `input`, one line each: an option or its number.
+ */
+export function terminalUi(stream: NodeJS.WriteStream = process.stderr, input: NodeJS.ReadableStream = process.stdin): Ui {
   const tty = Boolean(stream.isTTY);
   const style = (format: Parameters<typeof styleText>[0], text: string) => styleText(format, text, { stream });
+  // one reader for every choice, so that lines read ahead are not lost between them
+  let lines: AsyncIterator<string> | undefined;
 
   return {
     banner() {
@@ -64,6 +73,20 @@ export function terminalUi(stream: NodeJS.WriteStream = process.stderr): Ui {
 
     note(text) {
       stream.write(`    ${style("yellow", text)}\n`);
+    },
+
+    async choose(question, options) {
+      lines ??= createInterface({ input, terminal: false })[Symbol.asyncIterator]();
+      const menu = options.map((o, i) => `${i + 1}) ${o}`).join("  ");
+      while (true) {
+        stream.write(`  ${question}\n    ${menu}\n  > `);
+        const next = await lines.next();
+        if (next.done) throw new DoppelblindError(`No answer to "${question}": input ended.`);
+        const answer = next.value.trim();
+        const picked = options.find((o, i) => answer === o || answer === String(i + 1));
+        if (picked) return picked;
+        stream.write(`    ${style("yellow", `answer one of: ${options.join(", ")}`)}\n`);
+      }
     },
   };
 }

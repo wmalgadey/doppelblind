@@ -12,6 +12,11 @@ export interface Answer extends AnsweredQuestion {
 
 export const ANSWERS_FILE = "answers.md";
 
+/** The answer that leaves a decision open on purpose. */
+export const FREE = "free";
+/** The answer that puts a decision outside this change. */
+export const OUT_OF_SCOPE = "out of scope";
+
 const QUESTION_HEADING = /^### (Q-\d{2,})[ \t]*$/m;
 const ROUND_HEADING = /^## Round (\d+)[ \t]*$/m;
 const ANSWER_MARK = "**Answer:**";
@@ -55,5 +60,12 @@ export function renderAnswerLog(answers: Answer[]): string {
   for (const round of [...new Set(answers.map((a) => a.round))].sort((a, b) => a - b)) {
     lines.push(`## Round ${round}`, "", ...renderAnswers(answers.filter((a) => a.round === round)));
   }
+  return lines.join("\n").trimEnd() + "\n";
+}
+
+/** Renders answers as the spec agent gets them: each question's text and its answer, without IDs or rounds. */
+export function renderAnswerList(answers: AnsweredQuestion[]): string {
+  const lines = ["# Answers", ""];
+  for (const a of answers) lines.push(`**Question:** ${a.question}`, "", ANSWER_MARK, "", a.answer, "");
   return lines.join("\n").trimEnd() + "\n";
 }
