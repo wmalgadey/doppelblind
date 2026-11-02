@@ -4,7 +4,7 @@ import { DoppelblindError } from "./errors.ts";
 
 export interface Step {
   done(detail?: string): void;
-  fail(detail?: string): void;
+  fail(): void;
 }
 
 /** What the flow reports while it runs. */
@@ -67,7 +67,7 @@ export function terminalUi(stream: NodeJS.WriteStream = process.stderr, input: N
       };
       return {
         done: (detail) => finish(style("green", "✔"), detail),
-        fail: (detail) => finish(style("red", "✘"), detail),
+        fail: () => finish(style("red", "✘")),
       };
     },
 

@@ -56,14 +56,10 @@ export function fillAnswers(markdown: string, answers: { id: string; answer: str
   return result.trimEnd() + "\n";
 }
 
-/** Renders answered questions in the layout `readAnswers` reads back. */
-export function renderAnswers(answered: Answer[]): string[] {
-  return answered.flatMap((q) => [`### ${q.id}`, "", q.question, "", ANSWER_MARK, "", q.answer, ""]);
-}
-
 /** Renders answers.md: every answer given so far, in the layout `readAnswers` reads back. */
 export function renderAnswerLog(answers: Answer[]): string {
-  return ["# Answers", "", ...renderAnswers(answers)].join("\n").trimEnd() + "\n";
+  const lines = answers.flatMap((q) => [`### ${q.id}`, "", q.question, "", ANSWER_MARK, "", q.answer, ""]);
+  return ["# Answers", "", ...lines].join("\n").trimEnd() + "\n";
 }
 
 /** Renders answers as the spec agent gets them: each question's text and its answer, without IDs. */
