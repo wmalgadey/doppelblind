@@ -14,7 +14,9 @@ Doppelblind is not for me alone; it is not restricted to particular users. Their
 
 Doppelblind works with any project structure. A project fulfils a contract — where its binding sources are, how a source is cited, which paths each role may write, which paths are protected, how a test names the criterion it checks, where the risk matrix is — and does not prescribe formats: a flat decision file or an ADR directory, a product vision or another description of what the system should do are equally valid, as long as each source is citable and says what is in force.
 
-The contract is declared in the project, in a `.doppelblind.conf` file. Run state also lives in the project for now. Role prompts, harness settings and output schemas do not live in the project; nothing a role runs with is loaded from a directory that role can write. What Doppelblind produces — specs, acceptance tests, their lock and inventory — are ordinary project artifacts and are versioned like any other.
+A spec cites only what binds the spec: a description of what the system should do, decisions that say they bind the spec, and the answers I gave to the open questions of any spec. Each decision says whether it binds the spec or only the plan; one that binds only the plan, such as a runtime, a language or a library, is never cited by a spec. Specs themselves are not sources, because a model writes them.
+
+The contract is declared in the project, in a `.doppelblind.conf` file. Run state also lives in the project for now. Role prompts, harness settings and output schemas do not live in the project; nothing a role runs with is loaded from a directory that role can write. What Doppelblind produces — specs, acceptance tests, their lock and inventory — are ordinary project artifacts and are versioned like any other. For now I commit them myself (see OUT-13).
 
 A project is a full spec-driven project on its own: its gates run in the project's CI and apply to every change, whoever made it. Only the trusted development pipeline runs through Doppelblind, not in the project.
 
@@ -24,12 +26,12 @@ Only the user changes the risk matrix. A skill inside the project helps maintain
 
 Sources are written by people. Skills that write into a binding source belong to the human side and are unreachable for every role in a run.
 
-Agents run through an agent CLI in headless mode. I use a Claude subscription, not a per-token API key; the classifier also runs under the subscription, with typed output. I want to be able to switch to other agent CLIs.
+Agents run through an agent CLI in headless mode. I use a Claude subscription, not a per-token API key; the classifier also runs under the subscription, with typed output. I want to be able to switch to other agent CLIs. Until then, every role runs with Claude Code. I also want to choose the model per role: strong models where judgement decides — spec, plan, review — and cheaper ones for implementation. A complex implementation may be led by a model of its own that splits the work and hands the parts to cheaper models.
 
 ## 3. Core loop
 
 1. I write a brief.
-2. The spec agent writes binding criteria, each with an ID and a cited source, separate from wishes, and lists every decision the brief does not make as an open question without a suggested answer. I answer them.
+2. The spec agent writes binding criteria, each with an ID and a cited source, separate from wishes, and lists every decision the brief does not make as an open question without a suggested answer. I answer them, or leave a decision open on purpose; the spec agent then runs again from scratch on the brief, the sources and every answer so far, until no open question concerns a criterion or a brief has had three rounds.
 3. The test author, who never sees implementation code or plan, writes acceptance tests per criterion and lists every assumption it had to make.
 4. If the risk matrix or the assumptions call for it, I approve before implementation. The acceptance tests are frozen.
 5. The implementer works until the acceptance tests are green or reports a divergence; the verifier, who never sees the implementer's report, returns findings until there are none or a limit is reached.
@@ -51,8 +53,11 @@ Agents run through an agent CLI in headless mode. I use a Claude subscription, n
 1. Every boundary that matters has a first line that holds even if the agent ignores or circumvents it: what a role must not see is absent from its checkout or mount; what it must not change is read-only and rejected by a path check; what is frozen is secured by hash and test inventory. Harness rules and prompts are a second line at most.
 2. No agent is rewarded on the signal that checks it, and no agent's account of its own work counts as evidence. Signals are produced by systems: git, test reports, gates, the orchestrator.
 3. The orchestrator is deterministic code. It holds the state, starts exactly one role per step in a fresh context, validates structured output against its schema — invalid output is a failure, never an empty list — and decides whether an approval is needed: one yes suffices, an uncertain answer counts as yes. The implementer never classifies risk.
-4. Every run is bounded by rounds per loop, time and cost. At a limit, a human decides; nothing is approved automatically by waiting.
+4. Every run is bounded by rounds per loop, time and cost. I can set the time and cost limits when I start a run. At a limit, a human decides; nothing is approved automatically by waiting.
 5. Sources are written only by people.
+6. Every run records its state, its logs and the input and output of every role in the project's .doppelblind folder, for later analysis.
+
+Every invariant holds for a role from the outcome that introduces it. §9 describes how Doppelblind's own code was written before that, not how a run works.
 
 ## 6. Capabilities
 
@@ -65,7 +70,7 @@ Agents run through an agent CLI in headless mode. I use a Claude subscription, n
 | GATES      | Protected paths, frozen acceptance tests, test inventory, trace, source lint, mutation, runtime budgets   |
 | RISK       | Risk matrix, path rules, classifier, the business and technical approvals                                 |
 | SIGNALS    | Run log, failure-mode metrics over many runs                                                              |
-| AGENT      | Running an agent CLI headless; switching between CLIs                                                     |
+| AGENT      | Running an agent CLI headless; switching between CLIs; choosing the model per role                        |
 
 ## 7. Outcomes
 
@@ -83,6 +88,9 @@ Agents run through an agent CLI in headless mode. I use a Claude subscription, n
 | OUT-10 | see the failure-mode metrics as trends over features                                                         | Later  | SIGNALS                |
 | OUT-11 | start a new project from a default structure that fulfils the contract                                       | Later  | CONTRACT               |
 | OUT-12 | keep a project's contract and run state outside the project                                                  | Later  | CONTRACT, FLOW         |
+| OUT-13 | have what a run produces committed regularly, without committing it myself                                   | Later  | FLOW                   |
+| OUT-14 | choose the model per role: strong ones for spec, plan and review, cheaper ones for implementation            | Later  | AGENT, ROLES           |
+| OUT-15 | write briefs and get specs in a language other than English                                                  | Later  | ROLES                  |
 
 OUT-01 to OUT-05 are the core loop, built in this order. The goal (§1) is reached with OUT-05.
 
@@ -94,6 +102,9 @@ OUT-01 to OUT-05 are the core loop, built in this order. The goal (§1) is reach
 - OUT-10: as soon as I have built a few features in another project.
 - OUT-11: as soon as the core loop stands, starting from my own basic setup. Before OUT-08 unless OUT-08 is triggered first.
 - OUT-12: as soon as I build many projects with Doppelblind.
+- OUT-13: as soon as committing by hand slows me down or I lose changes between runs.
+- OUT-14: as soon as the cost of runs slows me down, or I want a role to run with a model other than the one of the role it checks.
+- OUT-15: as soon as I or someone else wants to work in a language other than English.
 
 ## 9. Bootstrapping
 
