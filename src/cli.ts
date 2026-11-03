@@ -53,17 +53,26 @@ async function main(argv: string[]): Promise<number> {
   });
 
   const specFile = path.relative(process.cwd(), result.specFile);
+  // with questions still open, answering them is the next step of the flow
+  const next =
+    `  Next: answer the open questions in ${specFile}; leave empty what you do not want to answer.\n` +
+    `  Then run \`doppelblind feature ${brief}\` again. For each question still without an answer it asks:\n` +
+    `  free, out of scope, stop (answer it later) or finish (end the spec step). Then it asks whether the\n` +
+    `  spec agent writes the spec again with all answers. Once you want to give no more answers, choose\n` +
+    `  finish or decline another run: the spec step is then final.\n`;
   process.stderr.write(
     `\n  ${result.criteria} criteria, ${result.openQuestions} open questions.\n` +
       `  Status: ${result.status}\n` +
       (result.status === "final"
         ? `  The spec step is final: ${result.leftOpen} questions left open, ${result.outOfScope} out of scope, ${result.unanswered} unanswered.\n`
         : result.stopped.length > 0
-          ? `  Stopped at ${result.stopped[0]}: ${result.stopped.length} questions still have no answer. Answer them in ${specFile}, then run again.\n`
+          ? `  Stopped at ${result.stopped[0]}: ${result.stopped.length} questions still have no answer.\n` + next
           : result.openQuestions > 0
-            ? `  Answer the open questions in ${specFile}, then run again.\n`
+            ? next
             : "") +
-      "  The flow ends here: no further role exists yet.\n",
+      (result.status === "final" || (result.openQuestions === 0 && result.stopped.length === 0)
+        ? "  The flow ends here: no further role exists yet.\n"
+        : ""),
   );
   process.stdout.write(`${specFile}\n`);
   return 0;
