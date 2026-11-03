@@ -63,9 +63,20 @@ export function renderAnswerLog(answers: Answer[]): string {
   return ["# Answers", "", ...lines].join("\n").trimEnd() + "\n";
 }
 
-/** Renders answers as the spec agent gets them: each question's text and its answer, without IDs. */
-export function renderAnswerList(answers: Answer[]): string {
+/** A decision the user made on an assumption of the test author, as the spec agent gets it. */
+export interface DecidedAssumption {
+  assumption: string;
+  /** The Decision field as the user wrote it: `accepted` or `rejected: <text>`. */
+  decision: string;
+}
+
+/**
+ * Renders answers as the spec agent gets them: each question's text and its answer, without IDs; then each
+ * decided assumption of the test author, its text in place of the question's and the decision in place of the answer.
+ */
+export function renderAnswerList(answers: Answer[], assumptions: DecidedAssumption[] = []): string {
   const lines = ["# Answers", ""];
   for (const a of answers) lines.push(`**Question:** ${a.question}`, "", ANSWER_MARK, "", a.answer, "");
+  for (const a of assumptions) lines.push(`**Assumption:** ${a.assumption}`, "", ANSWER_MARK, "", a.decision, "");
   return lines.join("\n").trimEnd() + "\n";
 }

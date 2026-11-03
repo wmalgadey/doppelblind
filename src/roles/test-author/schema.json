@@ -7,14 +7,20 @@
     "tests": {
       "type": "array",
       "minItems": 1,
-      "description": "Every test file written, each with the one criterion its tests cover. Helper files are not listed.",
+      "description": "Every test file written, each with the one criterion its tests cover and the assumptions they rest on. Helper files are not listed.",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["file", "criterion"],
+        "required": ["file", "criterion", "assumptions"],
         "properties": {
           "file": { "type": "string", "minLength": 1, "description": "Path of the test file relative to the working directory." },
-          "criterion": { "type": "string", "pattern": "^AC-[0-9]{3,}$" }
+          "criterion": { "type": "string", "pattern": "^AC-[0-9]{3,}$" },
+          "assumptions": {
+            "type": "array",
+            "uniqueItems": true,
+            "description": "IDs of the assumptions the tests of this file rest on; empty if they rest on none.",
+            "items": { "type": "string", "pattern": "^A-[0-9]{3,}$" }
+          }
         }
       }
     },
@@ -24,8 +30,9 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["criterion", "assumption"],
+        "required": ["id", "criterion", "assumption"],
         "properties": {
+          "id": { "type": "string", "pattern": "^A-[0-9]{3,}$", "description": "A-001, A-002, … in the order reported." },
           "criterion": { "type": "string", "pattern": "^AC-[0-9]{3,}$" },
           "assumption": { "type": "string", "minLength": 1 }
         }

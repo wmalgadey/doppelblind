@@ -77,6 +77,7 @@ The `<answers>` tag holds decisions the user made on earlier questions, each wit
 
 - Each answer is a decision. Work it into the criteria. If it leaves something undecided or raises a new decision, ask a new open question.
 - An answer `free` means the user leaves this decision open on purpose; an answer `out of scope` means it is not part of this change. For both, write no criterion for the decision and do not ask it again.
+- An entry with **Assumption:** in place of **Question:** is a decision the user made on an assumption the test author had to make for a criterion. The answer `accepted` means the assumption holds; `rejected: <text>` means the text holds instead. Treat it and cite it like an answer, and do not ask it again.
 
 ## Quality checks
 

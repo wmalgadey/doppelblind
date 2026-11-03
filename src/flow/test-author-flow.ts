@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { lockPath, readLock, writeLock } from "../acceptance/lock.ts";
+import { readRecord, writeRecord, type TestAuthorRecord } from "../acceptance/record.ts";
 import { passes, runTestFile, testCommand, type TestFileResult } from "../acceptance/test-run.ts";
 import { runClaude, TRACE_FILE, type Agent, type AgentRequest, type AgentResponse } from "../agent/claude.ts";
 import { checkWrites, copyWritten, createWorkspace, hash, hasTests, planView, removeWorkspace, type ViewPlan, type Workspace } from "../boundary/view.ts";
@@ -8,6 +9,19 @@ import { CONTRACT_FILE, loadContract, toProjectPath, type Contract } from "../co
 import { AgentLimitError, DoppelblindError } from "../errors.ts";
 import { validateOutput } from "../gates/schema.ts";
 import * as testAuthor from "../roles/test-author/index.ts";
+import {
+  ACCEPTED,
+  ASSUMPTIONS_FILE,
+  assumptionId,
+  assumptionNumber,
+  decidedText,
+  readAssumptions,
+  REJECTED,
+  renderAssumptions,
+  undecided,
+  type Assumption,
+  type RecordedAssumption,
+} from "../spec/assumptions.ts";
 import { SPEC_FILE } from "../spec/folder.ts";
 import { parseSpec, type ParsedSpec } from "../spec/parse.ts";
 import { readState, STATE_DIR } from "../spec/state.ts";
@@ -30,12 +44,17 @@ export interface TestAuthorOptions {
 export interface TestAuthorResult {
   /** Project path of the spec.md the tests were written for. */
   spec: string;
-  tests: { file: string; criterion: string }[];
+  tests: { file: string; criterion: string; assumptions: string[] }[];
   /** Other files the test author wrote next to its tests, such as helpers. */
   helpers: string[];
   /** Project path of review.md; undefined when the spec has no criterion proven by review. */
   review?: string;
-  assumptions: testAuthor.TestAuthorOutput["assumptions"];
+  /** The assumptions this run reported, with the IDs they have in assumptions.md; none when no agent ran. */
+  assumptions: Assumption[];
+  /** Project path of assumptions.md; undefined when the spec has no assumption. */
+  assumptionsFile?: string;
+  /** How many assumptions in assumptions.md wait for a decision; the tests are not locked while any does. */
+  undecided: number;
   /** Test files that pass before any implementation; undefined when the project declares no test command. */
   passing?: TestFileResult[];
   /** Project path of the lock; undefined when the user kept the tests unlocked. */
@@ -65,7 +84,9 @@ export function briefIsFinal(cwd: string, brief: string): boolean {
  * Hands a final spec to the test author, which writes the acceptance tests for its criteria proven by test, and has
  * the review file written for its criteria proven by review. The test author runs in a sandbox that holds only the
  * existing acceptance tests and the test infrastructure; only what it wrote into the spec's folder under the test
- * author's path reaches the project. The orchestrator runs the tests itself, and on the user's word locks them.
+ * author's path reaches the project. The orchestrator runs the tests itself and writes the assumptions the test
+ * author made into assumptions.md next to spec.md. Only once the user has decided every assumption there can the
+ * tests be locked; a rejected assumption starts the test author again, and every decision binds the later runs.
  */
 export async function runTestAuthor(options: TestAuthorOptions): Promise<TestAuthorResult> {
   const { ui } = options;
@@ -90,6 +111,21 @@ export async function runTestAuthor(options: TestAuthorOptions): Promise<TestAut
   });
   const { root } = contract;
   const specPath = `${folder}/${SPEC_FILE}`;
+  const name = path.posix.basename(folder);
+  const assumptionsPath = `${folder}/${ASSUMPTIONS_FILE}`;
+
+  const decisions = existsSync(path.join(root, assumptionsPath))
+    ? await step(ui, "Reading the decisions on the assumptions", () => readDecisions(root, assumptionsPath),
+      (d) => `${d.length} assumptions decided in ${assumptionsPath}`)
+    : [];
+  const record = readRecord(root, name);
+  // a rejection the last completed run did not receive starts the test author again
+  const rejections = decisions.filter((a) => a.decision?.kind === "rejected" && record?.handed[a.id] !== a.raw);
+  if (rejections.length > 0) {
+    ui.note(`${rejections.map((a) => a.id).join(", ")} rejected in ${assumptionsPath}: the test author starts again for ${specPath}`);
+  } else if (record?.awaitingDecisions) {
+    return lockDecided(ui, root, folder, assumptionsPath, record, decisions);
+  }
 
   const plan = await step(ui, "Preparing what the test author may see", () => planFor(contract, folder),
     (p) => `${p.acceptanceTests.length + p.infrastructure.length} files visible, ${p.unitTests.length} unit tests hidden`);
@@ -103,7 +139,7 @@ export async function runTestAuthor(options: TestAuthorOptions): Promise<TestAut
   const review = reviewCriteria.length === 0 ? undefined : await writeReviewGuide(options, root, specPath, spec, limits, plan.writable);
   if (!review) ui.note(`${specPath} has no criterion proven by review; no review file is written`);
 
-  const handed = testAuthor.handOver(spec, "test");
+  const handed = testAuthor.handOver(spec, "test", decidedByCriterion(decisions));
   const request: AgentRequest = {
     systemPrompt: testAuthor.systemPrompt,
     userMessage: testAuthor.buildUserMessage(handed, plan.writable, [...plan.acceptanceTests, ...plan.infrastructure]),
@@ -150,51 +186,171 @@ export async function runTestAuthor(options: TestAuthorOptions): Promise<TestAut
       }, (files) => `${files.length} files in ${plan.writable}/`);
       return { output, files };
     });
-    const tests = written.output.tests.map((t) => ({ file: normalize(t.file), criterion: t.criterion }));
+    // the agent numbers its assumptions from A-001 in every run; in assumptions.md they follow the earlier ones
+    const ids = renumbered(written.output.assumptions, decisions);
+    const tests = written.output.tests.map((t) => ({ file: normalize(t.file), criterion: t.criterion, assumptions: t.assumptions.map((a) => ids.get(a)!) }));
     for (const t of tests) ui.note(`wrote ${t.file} (${t.criterion})`);
+    const added: Assumption[] = written.output.assumptions.map((a) => ({
+      id: ids.get(a.id)!,
+      criterion: a.criterion,
+      assumption: a.assumption,
+      files: tests.filter((t) => t.assumptions.includes(ids.get(a.id)!)).map((t) => t.file),
+    }));
+    const entries = [...decisions, ...added];
+    if (entries.length > 0) writeFileSync(path.join(root, assumptionsPath), renderAssumptions(SPEC_FILE, entries));
+    for (const a of added) ui.note(`assumption ${a.id} (${a.criterion}): ${a.assumption}`);
 
     const passing = await ownTestRun(options, contract, runDir, tests);
     const reviewPath = review && `${plan.writable}/${REVIEW_FILE}`;
+    const helpers = written.files.filter((f) => !tests.some((t) => t.file === f));
     const result: TestAuthorResult = {
       spec: specPath,
       tests,
-      helpers: written.files.filter((f) => !tests.some((t) => t.file === f)),
+      helpers,
       ...(reviewPath && { review: reviewPath }),
-      assumptions: written.output.assumptions,
+      assumptions: added,
+      ...(entries.length > 0 && { assumptionsFile: assumptionsPath }),
+      undecided: added.length,
       ...(passing && { passing }),
     };
+    const completed: TestAuthorRecord = {
+      run: toProjectPath(root, runDir),
+      tests,
+      helpers,
+      ...(reviewPath && { review: reviewPath }),
+      ...(passing && { passing }),
+      handed: Object.fromEntries(decisions.map((a) => [a.id, a.raw])),
+    };
 
-    const details = [
-      `${tests.length} test files${reviewPath ? ` and ${reviewPath}` : ""} in ${plan.writable}/`,
-      `${result.assumptions.length} assumptions`,
-      ...(passing ?? []).map((p) => `${p.criterion} passes before any implementation: ${p.file}`),
-      ...(passing ? [] : ["the tests were not run: the project declares no test command"]),
-    ];
-    const question = `Lock the acceptance tests of ${specPath}? Locked tests are frozen: no later test author run replaces them.`;
-    if ((await ui.choose(question, [LOCK, KEEP_UNLOCKED], details)) === LOCK) {
-      result.lock = await step(ui, "Writing the lock", () => writeLock(root, path.posix.basename(folder), {
-        spec: specPath,
-        specSha256: hash(path.join(root, specPath)),
-        lockedAt: new Date().toISOString(),
-        run: toProjectPath(root, runDir),
-        files: [...written.files, ...(reviewPath ? [reviewPath] : [])].map((f) => ({
-          path: f,
-          sha256: hash(path.join(root, f)),
-          criterion: tests.find((t) => t.file === f)?.criterion ?? null,
-        })),
-      }), (lock) => lock);
-    } else {
-      ui.note(`not locked: a later test author run on ${specPath} replaces these files`);
+    // the gate before the lock: every assumption needs a decision first
+    if (added.length > 0) {
+      writeRecord(root, name, { ...completed, awaitingDecisions: true });
+      ui.note(`not locked: ${added.length} assumptions wait for a decision in ${assumptionsPath}; ` +
+        `write ${ACCEPTED} or ${REJECTED}: <what applies instead> into each Decision field and run the test author again`);
+      return result;
     }
+    writeRecord(root, name, completed);
+    result.lock = await offerLock(ui, root, folder, completed, entries.length > 0 ? assumptionsPath : undefined, [
+      `${tests.length} test files${reviewPath ? ` and ${reviewPath}` : ""} in ${plan.writable}/`,
+      `no new assumptions${decisions.length > 0 ? `; ${decisions.length} decided in ${assumptionsPath}` : ""}`,
+    ]);
     return result;
   } catch (err) {
     // the user declined to raise a limit: nothing of the run reaches the project
     if (err instanceof AgentLimitError && err.limit !== "turns") throw err;
-    keepIncomplete(err, ws, root, copied);
+    const kept = keepIncomplete(err, ws, root, copied);
+    // the files of the run that waits for decisions were replaced: they are no longer the ones to lock
+    const last = readRecord(root, name);
+    if (kept.length > 0 && last?.awaitingDecisions) writeRecord(root, name, { ...last, awaitingDecisions: undefined });
     throw err;
   } finally {
     if (ws) removeWorkspace(ws);
   }
+}
+
+/** Reads assumptions.md; stops when an assumption has no valid decision, since neither a run nor the lock may go on. */
+function readDecisions(root: string, file: string): RecordedAssumption[] {
+  const entries = readAssumptions(readFileSync(path.join(root, file), "utf8"));
+  const problems = undecided(entries);
+  if (problems.length > 0) {
+    throw new DoppelblindError(`${problems.length} assumptions in ${file} have no valid decision; the acceptance tests are not locked.`, [
+      ...problems,
+      `Write ${ACCEPTED} or ${REJECTED}: <what applies instead> into each Decision field, then run the test author again.`,
+    ]);
+  }
+  return entries;
+}
+
+/** What the decided assumptions make binding, by criterion ID. */
+function decidedByCriterion(decisions: RecordedAssumption[]): Map<string, string[]> {
+  const result = new Map<string, string[]>();
+  for (const a of decisions) {
+    const text = decidedText(a);
+    if (text !== undefined) result.set(a.criterion, [...(result.get(a.criterion) ?? []), text]);
+  }
+  return result;
+}
+
+/** New IDs for the agent's assumptions, following the highest ID assumptions.md holds, in the order reported. */
+function renumbered(assumptions: testAuthor.TestAuthorOutput["assumptions"], earlier: RecordedAssumption[]): Map<string, string> {
+  const after = Math.max(0, ...earlier.map((a) => assumptionNumber(a.id)));
+  return new Map(assumptions.map((a, i) => [a.id, assumptionId(after + i + 1)]));
+}
+
+/**
+ * The gate has passed for the tests of the run that waited for decisions: every assumption is decided and none
+ * rejected anew. Offers to lock those tests without another run.
+ */
+async function lockDecided(
+  ui: Ui,
+  root: string,
+  folder: string,
+  assumptionsPath: string,
+  record: TestAuthorRecord,
+  decisions: RecordedAssumption[],
+): Promise<TestAuthorResult> {
+  const files = [...record.tests.map((t) => t.file), ...record.helpers, ...(record.review ? [record.review] : [])];
+  const missing = files.filter((f) => !existsSync(path.join(root, f)));
+  if (missing.length > 0) {
+    writeRecord(root, path.posix.basename(folder), { ...record, awaitingDecisions: undefined });
+    throw new DoppelblindError(`Files of the test author run ${record.run} are missing; they cannot be locked.`, [
+      ...missing.map((f) => `missing: ${f}`),
+      "Run the test author again to write the acceptance tests anew.",
+    ]);
+  }
+  const accepted = decisions.filter((a) => a.decision?.kind === "accepted").length;
+  ui.note(`every assumption in ${assumptionsPath} is decided: ${accepted} accepted, ${decisions.length - accepted} rejected and already applied`);
+  const lock = await offerLock(ui, root, folder, record, assumptionsPath, [
+    `${record.tests.length} test files of ${record.run}`,
+    `${decisions.length} assumptions decided in ${assumptionsPath}`,
+  ]);
+  writeRecord(root, path.posix.basename(folder), { ...record, awaitingDecisions: undefined });
+  return {
+    spec: `${folder}/${SPEC_FILE}`,
+    tests: record.tests,
+    helpers: record.helpers,
+    ...(record.review && { review: record.review }),
+    assumptions: [],
+    assumptionsFile: assumptionsPath,
+    undecided: 0,
+    ...(record.passing && { passing: record.passing }),
+    ...(lock && { lock }),
+  };
+}
+
+/** Asks whether to lock the files of a completed run, with assumptions.md if the spec has one, and writes the lock. */
+async function offerLock(
+  ui: Ui,
+  root: string,
+  folder: string,
+  run: TestAuthorRecord,
+  assumptionsPath: string | undefined,
+  details: string[],
+): Promise<string | undefined> {
+  const specPath = `${folder}/${SPEC_FILE}`;
+  const { passing } = run;
+  const question = `Lock the acceptance tests of ${specPath}? Locked tests are frozen: no later test author run replaces them.`;
+  const shown = [
+    ...details,
+    ...(passing ?? []).map((p) => `${p.criterion} passes before any implementation: ${p.file}`),
+    ...(passing ? [] : ["the tests were not run: the project declares no test command"]),
+  ];
+  if ((await ui.choose(question, [LOCK, KEEP_UNLOCKED], shown)) !== LOCK) {
+    ui.note(`not locked: a later test author run on ${specPath} replaces these files`);
+    return undefined;
+  }
+  const files = [...run.tests.map((t) => t.file), ...run.helpers, ...(run.review ? [run.review] : []), ...(assumptionsPath ? [assumptionsPath] : [])];
+  return step(ui, "Writing the lock", () => writeLock(root, path.posix.basename(folder), {
+    spec: specPath,
+    specSha256: hash(path.join(root, specPath)),
+    lockedAt: new Date().toISOString(),
+    run: run.run,
+    files: files.map((f) => ({
+      path: f,
+      sha256: hash(path.join(root, f)),
+      criterion: run.tests.find((t) => t.file === f)?.criterion ?? null,
+    })),
+  }), (lock) => lock);
 }
 
 /** Decides what the test author sees; stops if the contract does not say what it must not see or where it writes. */
@@ -285,7 +441,12 @@ function checkedWrites(ws: Workspace, spec: ParsedSpec, output: testAuthor.TestA
   for (const id of byTest) {
     if (![...covered.values()].includes(id)) problems.push(`${id} has no acceptance test.`);
   }
-  if (problems.length > 0) throw new DoppelblindError("The test author's tests do not cover the spec as required.", problems);
+  const reported = output.assumptions.map((a) => a.id);
+  for (const id of new Set(reported.filter((id, i) => reported.indexOf(id) !== i))) problems.push(`${id} is reported as more than one assumption.`);
+  for (const { file, assumptions } of output.tests) {
+    for (const id of assumptions) if (!reported.includes(id)) problems.push(`${normalize(file)} rests on ${id}, which is not a reported assumption.`);
+  }
+  if (problems.length > 0) throw new DoppelblindError("The test author's output does not cover the spec as required.", problems);
   return writes.written;
 }
 
@@ -314,7 +475,7 @@ async function ownTestRun(options: TestAuthorOptions, contract: Contract, runDir
  * After a failed run, keeps what the test author already wrote into its folder, unlocked, and lists it as
  * incomplete; an earlier run's files are replaced only when this run wrote any.
  */
-function keepIncomplete(err: unknown, ws: Workspace | undefined, root: string, copied: string[] | undefined): void {
+function keepIncomplete(err: unknown, ws: Workspace | undefined, root: string, copied: string[] | undefined): string[] {
   let kept = copied;
   if (!kept && ws && existsSync(ws.dir)) {
     const { written } = checkWrites(ws);
@@ -324,6 +485,7 @@ function keepIncomplete(err: unknown, ws: Workspace | undefined, root: string, c
   if (err instanceof DoppelblindError && kept?.length) {
     err.details.push(...kept.map((f) => `incomplete, not locked: ${f}`));
   }
+  return kept ?? [];
 }
 
 /** A path the agent reports, relative to its working directory, as a project path. */

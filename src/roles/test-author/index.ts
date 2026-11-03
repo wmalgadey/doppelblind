@@ -10,12 +10,14 @@ export interface HandedCriterion {
   then: string;
   /** For each question answered `free` that concerns the criterion: the aspect left to the implementer. */
   unspecified: string[];
+  /** For each decided assumption on the criterion: what the user's decision makes binding. */
+  decided: string[];
 }
 
 /** The test author's output, as its schema describes it. */
 export interface TestAuthorOutput {
-  tests: { file: string; criterion: string }[];
-  assumptions: { criterion: string; assumption: string }[];
+  tests: { file: string; criterion: string; assumptions: string[] }[];
+  assumptions: { id: string; criterion: string; assumption: string }[];
 }
 
 export interface ReviewEntry {
@@ -37,8 +39,11 @@ export const schema: object = JSON.parse(read("schema.json"));
 export const reviewPrompt: string = read("review-prompt.md");
 export const reviewSchema: object = JSON.parse(read("review-schema.json"));
 
-/** The criteria of `spec` proven by `provenBy`, reduced to what the test author may see. */
-export function handOver(spec: ParsedSpec, provenBy: SpecCriterion["provenBy"]): HandedCriterion[] {
+/**
+ * The criteria of `spec` proven by `provenBy`, reduced to what the test author may see, each with what the
+ * decisions in `decided` (by criterion ID) make binding for it.
+ */
+export function handOver(spec: ParsedSpec, provenBy: SpecCriterion["provenBy"], decided: Map<string, string[]> = new Map()): HandedCriterion[] {
   return spec.criteria
     .filter((c) => c.provenBy === provenBy)
     .map((c) => ({
@@ -47,12 +52,13 @@ export function handOver(spec: ParsedSpec, provenBy: SpecCriterion["provenBy"]):
       when: c.when,
       then: c.then,
       unspecified: c.leftOpen.flatMap((q) => (spec.leftOpen.has(q) ? [spec.leftOpen.get(q)!] : [])),
+      decided: decided.get(c.id) ?? [],
     }));
 }
 
 /**
  * The only spec content the test author gets: ID, Given, When and Then of each criterion proven by test,
- * with the aspects answered `free`, and where it writes. Never the spec file, its introduction or its questions.
+ * with the aspects answered `free` and the decided assumptions, and where it writes. Never the spec file, its introduction or its questions.
  */
 export function buildUserMessage(criteria: HandedCriterion[], writable: string, visible: string[]): string {
   return [
@@ -78,6 +84,7 @@ function renderCriterion(c: HandedCriterion, title?: string): string {
     `When: ${c.when}`,
     `Then: ${c.then}`,
     ...c.unspecified.map((u) => `deliberately unspecified: ${u}`),
+    ...c.decided.map((d) => `decided: ${d}`),
     "</criterion>",
   ];
   return lines.join("\n");

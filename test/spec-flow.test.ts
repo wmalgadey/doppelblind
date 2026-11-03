@@ -6,6 +6,7 @@ import type { Agent, AgentRequest } from "../src/agent/claude.ts";
 import { AgentLimitError, DoppelblindError } from "../src/errors.ts";
 import { runSpecFlow } from "../src/flow/spec-flow.ts";
 import { fillAnswers } from "../src/spec/answers.ts";
+import { renderAssumptions } from "../src/spec/assumptions.ts";
 import { readState } from "../src/spec/state.ts";
 import { BRIEF, makeProject, recordingUi, sampleSpec } from "./helpers.ts";
 
@@ -82,6 +83,34 @@ describe("spec-flow", () => {
     assert.match(md, /## Open questions\n\n### Q-02\n\nIn which language is the greeting\?\n\n\*\*Answer:\*\*\n$/);
     assert.ok(!md.includes("Answered questions"));
     assert.match(readFileSync(path.join(root, "specs/001-greet-everyone/answers.md"), "utf8"), /Hello and welcome\./);
+  });
+
+  test("a spec-create run gets the decided assumptions of the test author in <answers>, like answers, and may cite them", async () => {
+    const root = project();
+    const first = await runSpecFlow({ cwd: root, brief: "docs/briefs/greeting.md", ui: recordingUi(), agent: fakeAgent(sampleSpec()) });
+    const entries = [
+      { id: "A-001", criterion: "AC-001", assumption: "The greeter is called greet.", files: [], raw: "rejected: the greeter is called hello" },
+      { id: "A-002", criterion: "AC-001", assumption: "The greeter exits with 0.", files: [], raw: "accepted" },
+      { id: "A-003", criterion: "AC-001", assumption: "UNDECIDED ASSUMPTION", files: [] },
+      { id: "A-004", criterion: "AC-001", assumption: "INVALID ASSUMPTION", files: [], raw: "rejected" },
+    ];
+    writeFileSync(path.join(path.dirname(first.specFile), "assumptions.md"), renderAssumptions("spec.md", entries));
+
+    const calls: AgentRequest[] = [];
+    const cited = sampleSpec({
+      criteria: [{ ...sampleSpec().criteria[0], reason_in_source: null, reason_anchor: null, sources: [{ path: "specs/001-greet-everyone/answers.md", anchor: "rejected: the greeter is called hello" }] }],
+    });
+    await runSpecFlow({ cwd: root, brief: "docs/briefs/greeting.md", ui: recordingUi(), agent: fakeAgent(cited, calls) });
+
+    const message = calls[0].userMessage;
+    assert.ok(message.includes('<answers path="specs/001-greet-everyone/answers.md">\n# Answers\n\n' +
+      "**Assumption:** The greeter is called greet.\n\n**Answer:**\n\nrejected: the greeter is called hello\n\n" +
+      "**Assumption:** The greeter exits with 0.\n\n**Answer:**\n\naccepted\n</answers>"));
+    assert.ok(!message.includes("UNDECIDED ASSUMPTION"));
+    assert.ok(!message.includes("INVALID ASSUMPTION"));
+    assert.ok(!message.includes("A-00"));
+    // decisions on assumptions are not answers to questions: answers.md does not take them over
+    assert.ok(!existsSync(path.join(root, "specs/001-greet-everyone/answers.md")));
   });
 
   test("a question number is never reused, even after a run without questions", async () => {

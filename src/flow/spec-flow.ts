@@ -16,7 +16,9 @@ import {
   renderAnswerList,
   renderAnswerLog,
   type Answer,
+  type DecidedAssumption,
 } from "../spec/answers.ts";
+import { ASSUMPTIONS_FILE, readAssumptions } from "../spec/assumptions.ts";
 import { createSpecFolder, SPEC_FILE } from "../spec/folder.ts";
 import { highestQuestion, questionNumber, renumberQuestions } from "../spec/questions.ts";
 import { questionSections, renderSpec, type QuestionRecord } from "../spec/render.ts";
@@ -202,7 +204,10 @@ async function specCreate(
   ask = false,
 ): Promise<SpecFlowResult> {
   const { ui, agent = runClaude } = ctx.options;
-  const answers = previous && { path: previous.answersPath, content: previous.answers.length > 0 ? renderAnswerList(previous.answers) : "" };
+  const answers = previous && {
+    path: previous.answersPath,
+    content: previous.answers.length + previous.assumptions.length > 0 ? renderAnswerList(previous.answers, previous.assumptions) : "",
+  };
   const request = {
     systemPrompt: specAgent.systemPrompt,
     userMessage: specAgent.buildUserMessage(ctx.sources.brief, ctx.sources.others, answers),
@@ -313,6 +318,8 @@ interface Previous {
   answers: Answer[];
   /** How many answers were read from spec.md. */
   added: number;
+  /** The test author's assumptions the user has decided in assumptions.md; undecided or invalid ones are left out. */
+  assumptions: DecidedAssumption[];
 }
 
 /**
@@ -330,7 +337,11 @@ function readPrevious(root: string, brief: string, folder: string): Previous {
   const logged = existsSync(log) ? readAnswers(readFileSync(log, "utf8")) : [];
   const kept = logged.filter((a) => !added.some((b) => b.id === a.id));
   const answers = [...kept, ...added];
-  return { spec, answersPath: toProjectPath(root, log), answers, added: added.length };
+  const decisions = path.join(root, folder, ASSUMPTIONS_FILE);
+  const assumptions = existsSync(decisions)
+    ? readAssumptions(readFileSync(decisions, "utf8")).flatMap((a) => (a.decision ? [{ assumption: a.assumption, decision: a.raw }] : []))
+    : [];
+  return { spec, answersPath: toProjectPath(root, log), answers, added: added.length, assumptions };
 }
 
 function writeAnswerLog(root: string, previous: Previous): void {

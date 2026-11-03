@@ -115,15 +115,22 @@ function reportTests(result: TestAuthorResult): void {
   for (const h of result.helpers) lines.push(`    ${h}  (helper)`);
   lines.push(result.review ? `    ${result.review}  (review file)` : "  The spec has no criterion proven by review; no review file was written.");
   if (result.assumptions.length > 0) {
-    lines.push(`  Assumptions (${result.assumptions.length}):`);
-    for (const a of result.assumptions) lines.push(`    - ${a.criterion}: ${a.assumption}`);
+    lines.push(`  Assumptions (${result.assumptions.length}), in ${result.assumptionsFile}:`);
+    for (const a of result.assumptions) lines.push(`    - ${a.id} (${a.criterion}): ${a.assumption}`);
   }
   if (!result.passing) lines.push("  The tests were not run: the project declares no test command.");
   else if (result.passing.length > 0) {
     lines.push("  Passing before any implementation; decide whether the behaviour exists or the test must be rejected:");
     for (const p of result.passing) lines.push(`    - ${p.criterion}: ${p.file}`);
   }
-  lines.push(result.lock ? `  Locked: ${result.lock}` : "  Not locked: run the test author again to replace these files.");
+  if (result.lock) lines.push(`  Locked: ${result.lock}`);
+  else if (result.undecided > 0) {
+    lines.push(
+      `  Not locked: ${result.undecided} assumptions wait for a decision in ${result.assumptionsFile}.`,
+      "  Write accepted or rejected: <what applies instead> into each Decision field, then run the test author again:",
+      "  with every assumption accepted it offers the lock; a rejected one starts the test author again.",
+    );
+  } else lines.push("  Not locked: run the test author again to replace these files.");
   process.stderr.write(lines.join("\n") + "\n");
   const produced = [...result.tests.map((t) => t.file), ...result.helpers, ...(result.review ? [result.review] : [])];
   process.stdout.write(produced.map((f) => `${f}\n`).join(""));

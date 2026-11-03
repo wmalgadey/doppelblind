@@ -67,14 +67,22 @@ function project(options: { contract?: object; spec?: SpecOutput; final?: boolea
 const FAIL = "process.exit(1);\n";
 const PASS = "process.exit(0);\n";
 
+type ReportedTest = { file: string; criterion: string; assumptions: string[] };
+type ReportedAssumption = { id: string; criterion: string; assumption: string };
+const TESTS: ReportedTest[] = [
+  { file: `${WRITABLE}/ac-001.test.mjs`, criterion: "AC-001", assumptions: [] },
+  { file: `${WRITABLE}/ac-002.test.mjs`, criterion: "AC-002", assumptions: [] },
+];
+
 /**
  * Stands in for both agents: as the test author (it has tools) it writes `files` into its working directory and
- * reports `tests`; as the review guide it answers one entry per criterion in its message.
+ * reports `tests` and `assumptions`; as the review guide it answers one entry per criterion in its message.
  */
 function fakeAgents(
   files: Record<string, string> = { [`${WRITABLE}/ac-001.test.mjs`]: FAIL, [`${WRITABLE}/ac-002.test.mjs`]: FAIL },
   calls: AgentRequest[] = [],
-  tests = [{ file: `${WRITABLE}/ac-001.test.mjs`, criterion: "AC-001" }, { file: `${WRITABLE}/ac-002.test.mjs`, criterion: "AC-002" }],
+  tests: ReportedTest[] = TESTS,
+  assumptions: ReportedAssumption[] = [],
 ): Agent {
   return async (request) => {
     calls.push(request);
@@ -86,7 +94,7 @@ function fakeAgents(
       mkdirSync(path.dirname(path.join(request.workdir!, file)), { recursive: true });
       writeFileSync(path.join(request.workdir!, file), content);
     }
-    return { output: { tests, assumptions: [{ criterion: "AC-002", assumption: "The greeter is called greet." }] }, costUsd: 0.5 };
+    return { output: { tests, assumptions }, costUsd: 0.5 };
   };
 }
 
@@ -318,7 +326,7 @@ describe("test-author-flow", () => {
 
   test("a criterion without a test file fails the run", async () => {
     const root = project();
-    const tests = [{ file: `${WRITABLE}/ac-001.test.mjs`, criterion: "AC-001" }];
+    const tests = [TESTS[0]];
     await assert.rejects(runTestAuthor({ cwd: root, target: BRIEF_PATH, ui: recordingUi(), agent: fakeAgents(undefined, [], tests) }),
       (err: DoppelblindError) => err.details.includes("AC-002 has no acceptance test."));
   });
@@ -385,6 +393,140 @@ describe("test-author-flow", () => {
       },
     }), (err) => err instanceof AgentLimitError && err.limit === "turns");
     assert.ok(!ui.events.some((e) => e.startsWith("choose:")));
+  });
+});
+
+describe("assumption decisions", () => {
+  const ASSUMPTIONS = `${FOLDER}/assumptions.md`;
+  const greet = { id: "A-001", criterion: "AC-002", assumption: "The greeter is called greet." };
+  const exit = { id: "A-002", criterion: "AC-001", assumption: "The greeter exits with 0." };
+  const resting = (ids: string[][]): ReportedTest[] => TESTS.map((t, i) => ({ ...t, assumptions: ids[i] }));
+
+  /** Writes `decision` into the Decision field of assumption `id` in assumptions.md. */
+  function decide(root: string, id: string, decision: string) {
+    const file = path.join(root, ASSUMPTIONS);
+    const md = readFileSync(file, "utf8");
+    const at = md.indexOf("**Decision:**", md.indexOf(`## ${id}\n`)) + "**Decision:**".length;
+    writeFileSync(file, `${md.slice(0, at)}\n\n${decision}${md.slice(at)}`);
+  }
+
+  /** A project whose first test author run reported `greet` (AC-002) and `exit` (AC-001). */
+  async function afterFirstRun() {
+    const root = project();
+    const result = await runTestAuthor({ cwd: root, target: BRIEF_PATH, ui: recordingUi(), agent: fakeAgents(undefined, [], resting([["A-002"], ["A-001"]]), [greet, exit]) });
+    return { root, result };
+  }
+
+  test("a run with assumptions writes assumptions.md next to spec.md and does not offer the lock", async () => {
+    // recordingUi() without choices throws if the lock is offered
+    const { root, result } = await afterFirstRun();
+    assert.equal(result.assumptionsFile, ASSUMPTIONS);
+    assert.equal(result.undecided, 2);
+    assert.equal(result.lock, undefined);
+    assert.ok(!existsSync(lockFile(root)));
+    assert.deepEqual(result.tests.map((t) => t.assumptions), [["A-002"], ["A-001"]]);
+
+    const md = readFileSync(path.join(root, ASSUMPTIONS), "utf8");
+    assert.ok(md.includes(`## A-001\n\n**Criterion:** AC-002\n\n**Assumption:** The greeter is called greet.\n\n**Test files:**\n\n- ${WRITABLE}/ac-002.test.mjs\n\n**Decision:**\n\n## A-002`));
+    assert.ok(md.endsWith(`## A-002\n\n**Criterion:** AC-001\n\n**Assumption:** The greeter exits with 0.\n\n**Test files:**\n\n- ${WRITABLE}/ac-001.test.mjs\n\n**Decision:**\n`));
+  });
+
+  test("a run without assumptions writes no assumptions.md and offers the lock at once", async () => {
+    const root = project();
+    const result = await runTestAuthor({ cwd: root, target: BRIEF_PATH, ui: recordingUi(["lock"]), agent: fakeAgents() });
+    assert.ok(!existsSync(path.join(root, ASSUMPTIONS)));
+    assert.equal(result.assumptionsFile, undefined);
+    assert.ok(result.lock);
+  });
+
+  test("an assumption without a valid decision stops the next run before the test author starts and locks nothing", async () => {
+    for (const decision of [undefined, "rejected", "rejected:", "maybe"]) {
+      const { root } = await afterFirstRun();
+      decide(root, "A-002", "accepted");
+      if (decision !== undefined) decide(root, "A-001", decision);
+      const calls: AgentRequest[] = [];
+      await assert.rejects(runTestAuthor({ cwd: root, target: BRIEF_PATH, ui: recordingUi(), agent: fakeAgents(undefined, calls) }),
+        (err: DoppelblindError) => /1 assumptions in specs\/001-greet-everyone\/assumptions.md have no valid decision/.test(err.message) &&
+          err.details[0].startsWith("A-001 (AC-002): "));
+      assert.equal(calls.length, 0);
+      assert.ok(!existsSync(lockFile(root)));
+    }
+  });
+
+  test("once every assumption is accepted, the next run offers the lock of those tests without another test author run", async () => {
+    const { root, result: first } = await afterFirstRun();
+    decide(root, "A-001", "accepted");
+    decide(root, "A-002", "accepted");
+    const calls: AgentRequest[] = [];
+    const ui = recordingUi(["lock"]);
+    const result = await runTestAuthor({ cwd: root, target: BRIEF_PATH, ui, agent: fakeAgents(undefined, calls) });
+
+    assert.equal(calls.length, 0);
+    assert.deepEqual(result.tests, first.tests);
+    assert.deepEqual(result.passing, first.passing);
+    assert.equal(result.lock, ".doppelblind/locks/001-greet-everyone.json");
+    const lock = JSON.parse(readFileSync(lockFile(root), "utf8"));
+    assert.deepEqual(lock.files.map((f: { path: string }) => f.path), [`${WRITABLE}/ac-001.test.mjs`, `${WRITABLE}/ac-002.test.mjs`, `${WRITABLE}/review.md`, ASSUMPTIONS]);
+    assert.ok(ui.events.includes("note: every assumption in specs/001-greet-everyone/assumptions.md is decided: 2 accepted, 0 rejected and already applied"));
+  });
+
+  test("a rejected assumption starts the test author again with every decision as decided on its criterion", async () => {
+    const { root } = await afterFirstRun();
+    decide(root, "A-001", "rejected: the greeter is called hello");
+    decide(root, "A-002", "accepted");
+    const calls: AgentRequest[] = [];
+    const ui = recordingUi(["lock"]);
+    const result = await runTestAuthor({ cwd: root, target: BRIEF_PATH, ui, agent: fakeAgents(undefined, calls) });
+
+    const input = testAuthorCall(calls).userMessage;
+    assert.ok(input.includes("Then: it prints a greeting\ndeliberately unspecified: Which words does the greeting use?\ndecided: The greeter exits with 0.\n</criterion>"));
+    assert.ok(input.includes("Then: two then\ndecided: the greeter is called hello\n</criterion>"));
+    assert.ok(!input.includes("The greeter is called greet."));
+    assert.ok(ui.events.includes("note: A-001 rejected in specs/001-greet-everyone/assumptions.md: the test author starts again for specs/001-greet-everyone/spec.md"));
+    // no new assumption: the gate passes and the lock is offered at once
+    assert.equal(result.undecided, 0);
+    assert.ok(result.lock);
+    // the decisions stay in assumptions.md: they bind every later run
+    const md = readFileSync(path.join(root, ASSUMPTIONS), "utf8");
+    assert.ok(md.includes("**Decision:**\n\nrejected: the greeter is called hello\n"));
+    assert.ok(md.includes("**Decision:**\n\naccepted\n"));
+  });
+
+  test("new assumptions follow the earlier IDs; once decided, an already applied rejection does not start the test author again", async () => {
+    const { root } = await afterFirstRun();
+    decide(root, "A-001", "rejected: the greeter is called hello");
+    decide(root, "A-002", "accepted");
+    const another = { id: "A-001", criterion: "AC-001", assumption: "The greeting ends with a newline." };
+    const second = await runTestAuthor({ cwd: root, target: BRIEF_PATH, ui: recordingUi(), agent: fakeAgents(undefined, [], resting([["A-001"], []]), [another]) });
+
+    assert.deepEqual(second.assumptions.map((a) => a.id), ["A-003"]);
+    assert.deepEqual(second.tests.map((t) => t.assumptions), [["A-003"], []]);
+    assert.equal(second.undecided, 1);
+    assert.deepEqual([...readFileSync(path.join(root, ASSUMPTIONS), "utf8").matchAll(/^## (A-\d+)$/gm)].map((m) => m[1]), ["A-001", "A-002", "A-003"]);
+
+    decide(root, "A-003", "accepted");
+    const calls: AgentRequest[] = [];
+    const third = await runTestAuthor({ cwd: root, target: BRIEF_PATH, ui: recordingUi(["lock"]), agent: fakeAgents(undefined, calls) });
+    assert.equal(calls.length, 0);
+    assert.ok(third.lock);
+
+    // changing a rejection's text is a new rejection: the test author starts again
+    const rerun = project();
+    await runTestAuthor({ cwd: rerun, target: BRIEF_PATH, ui: recordingUi(), agent: fakeAgents(undefined, [], resting([[], ["A-001"]]), [greet]) });
+    decide(rerun, "A-001", "rejected: hello");
+    await runTestAuthor({ cwd: rerun, target: BRIEF_PATH, ui: recordingUi(["keep unlocked"]), agent: fakeAgents() });
+    const file = path.join(rerun, ASSUMPTIONS);
+    writeFileSync(file, readFileSync(file, "utf8").replace("rejected: hello", "rejected: hi"));
+    const again: AgentRequest[] = [];
+    await runTestAuthor({ cwd: rerun, target: BRIEF_PATH, ui: recordingUi(["keep unlocked"]), agent: fakeAgents(undefined, again) });
+    assert.ok(testAuthorCall(again).userMessage.includes("decided: hi\n"));
+  });
+
+  test("a test file resting on an assumption that is not reported fails the run", async () => {
+    const root = project();
+    await assert.rejects(runTestAuthor({ cwd: root, target: BRIEF_PATH, ui: recordingUi(), agent: fakeAgents(undefined, [], resting([["A-007"], []]), [greet]) }),
+      (err: DoppelblindError) => err.details.includes(`${WRITABLE}/ac-001.test.mjs rests on A-007, which is not a reported assumption.`));
+    assert.ok(!existsSync(path.join(root, ASSUMPTIONS)));
   });
 });
 
