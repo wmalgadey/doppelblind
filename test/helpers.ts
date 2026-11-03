@@ -36,7 +36,7 @@ export function recordingUi(choices: string[] = []): RecordingUi {
       events.push(`start: ${label}`);
       return {
         done: (detail) => events.push(`done: ${label}${detail ? ` (${detail})` : ""}`),
-        fail: () => events.push(`fail: ${label}`),
+        fail: (reason) => events.push(`fail: ${label}${reason ? ` (${reason})` : ""}`),
       };
     },
   };

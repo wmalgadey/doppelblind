@@ -1,8 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { runClaude, TRACE_FILE, type Agent, type AgentRequest } from "../agent/claude.ts";
+import { runClaude, TRACE_FILE, type Agent } from "../agent/claude.ts";
 import { loadContract, toProjectPath } from "../contract.ts";
-import { AgentLimitError, DoppelblindError } from "../errors.ts";
+import { DoppelblindError } from "../errors.ts";
 import { validateOutput } from "../gates/schema.ts";
 import { checkSpec } from "../gates/spec.ts";
 import * as specAgent from "../roles/spec-agent/index.ts";
@@ -20,8 +20,9 @@ import {
 import { createSpecFolder, SPEC_FILE } from "../spec/folder.ts";
 import { highestQuestion, questionNumber, renumberQuestions } from "../spec/questions.ts";
 import { questionSections, renderSpec, type QuestionRecord } from "../spec/render.ts";
-import { readState, specStatus, STATE_DIR, STATE_FILE, writeState, type BriefState, type SpecStatus } from "../spec/state.ts";
+import { readState, specStatus, STATE_FILE, writeState, type BriefState, type SpecStatus } from "../spec/state.ts";
 import type { Ui } from "../tui.ts";
+import { describeCost, runAgentWithLimitChoice, startRunLog, step, withLog } from "./run.ts";
 
 export interface SpecFlowOptions {
   cwd: string;
@@ -213,7 +214,7 @@ async function specCreate(
 
   // each attempt is a run of its own, with its own call and trace
   const { response, runDir, log } = await runAgentWithLimitChoice(ui, request, async (limits) => {
-    const runDir = startRunLog(ctx.root, request.systemPrompt, request.userMessage);
+    const runDir = startRunLog(ctx.root, "spec-agent", { ...request, ...limits });
     const log = toProjectPath(ctx.root, path.join(runDir, TRACE_FILE));
     ui.note(`trace: ${log}`);
     const response = await withLog(log, () =>
@@ -267,36 +268,6 @@ async function specCreate(
   });
 
   return { ...counts(spec, record), specFile, status, stopped: [] };
-}
-
-type Limits = Pick<AgentRequest, "timeoutMs" | "maxBudgetUsd">;
-
-/** Runs `attempt`; when it reaches a limit, asks the user whether to double that limit and run it again. */
-async function runAgentWithLimitChoice<T>(ui: Ui, initial: Limits, attempt: (limits: Limits) => Promise<T>): Promise<T> {
-  let { timeoutMs, maxBudgetUsd } = initial;
-  while (true) {
-    try {
-      return await attempt({ timeoutMs, maxBudgetUsd });
-    } catch (err) {
-      if (!(err instanceof AgentLimitError)) throw err;
-      const current = err.limit === "time" ? timeoutMs : maxBudgetUsd;
-      const increased = current * 2;
-      const answer = await ui.choose(
-        `Agent reached the ${err.limit === "time" ? "time" : "cost"} limit (${formatLimit(err.limit, current)}). ` +
-          `Increase it to ${formatLimit(err.limit, increased)} and retry?`,
-        ["yes", "no"],
-      );
-      if (answer !== "yes") throw err;
-      if (err.limit === "time") timeoutMs = increased;
-      else maxBudgetUsd = increased;
-    }
-  }
-}
-
-function formatLimit(limit: "time" | "budget", value: number): string {
-  if (limit === "budget") return `$${value.toFixed(2)}`;
-  const minutes = value / 60_000;
-  return `${minutes} minute${minutes === 1 ? "" : "s"}`;
 }
 
 /** Writes spec.md; refuses if spec.md changed since it was read. */
@@ -372,47 +343,4 @@ function readOutput(root: string, recorded: BriefState | undefined): specAgent.S
   const file = recorded?.run && path.join(root, recorded.run, OUTPUT_FILE);
   if (!file || !existsSync(file)) return undefined;
   return JSON.parse(readFileSync(file, "utf8"));
-}
-
-async function step<T>(ui: Ui, label: string, fn: () => T | Promise<T>, detail?: (result: T) => string): Promise<T> {
-  const s = ui.step(label);
-  try {
-    const result = await fn();
-    s.done(detail?.(result));
-    return result;
-  } catch (err) {
-    s.fail();
-    throw err;
-  }
-}
-
-function describeCost(response: { costUsd?: number; durationMs?: number }): string {
-  const parts = [];
-  if (response.durationMs !== undefined) parts.push(`${Math.round(response.durationMs / 1000)}s`);
-  if (response.costUsd !== undefined) parts.push(`$${response.costUsd.toFixed(2)}`);
-  return parts.join(", ");
-}
-
-/**
- * Starts a run folder in the project's run state with the agent's prompt and input,
- * which the agent completes with its call and trace, so any run can be inspected.
- */
-function startRunLog(root: string, systemPrompt: string, userMessage: string): string {
-  const base = path.join(root, STATE_DIR, "runs", `${new Date().toISOString().replace(/[:.]/g, "-")}-spec-agent`);
-  let dir = base;
-  for (let n = 2; existsSync(dir); n++) dir = `${base}-${n}`;
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(path.join(dir, "system-prompt.md"), systemPrompt);
-  writeFileSync(path.join(dir, "input.md"), userMessage);
-  writeFileSync(path.join(dir, TRACE_FILE), "");
-  return dir;
-}
-
-async function withLog<T>(log: string, fn: () => T | Promise<T>): Promise<T> {
-  try {
-    return await fn();
-  } catch (err) {
-    if (err instanceof DoppelblindError) err.details.push(`Agent trace: ${log}`);
-    throw err;
-  }
 }

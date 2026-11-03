@@ -204,7 +204,7 @@ describe("spec-flow", () => {
     ]);
   });
 
-  test("each run keeps the agent's prompt, input and trace in a run folder", async () => {
+  test("each run keeps the agent's prompt, input, guardrails and trace in a run folder", async () => {
     const root = project();
     const ui = recordingUi();
     const calls: AgentRequest[] = [];
@@ -213,8 +213,10 @@ describe("spec-flow", () => {
     const runs = path.join(root, ".doppelblind", "runs");
     const [run] = readdirSync(runs);
     assert.match(run, /-spec-agent$/);
-    assert.deepEqual(readdirSync(path.join(runs, run)).sort(), ["input.md", "output.json", "system-prompt.md", "trace.jsonl"]);
+    assert.deepEqual(readdirSync(path.join(runs, run)).sort(), ["guardrails.json", "input.md", "output.json", "system-prompt.md", "trace.jsonl"]);
     assert.equal(readFileSync(path.join(runs, run, "input.md"), "utf8"), calls[0].userMessage);
+    const guardrails = JSON.parse(readFileSync(path.join(runs, run, "guardrails.json"), "utf8"));
+    assert.deepEqual(guardrails, { timeoutMs: 15 * 60_000, maxBudgetUsd: 5, maxTurns: null, tools: [] });
     assert.equal(readFileSync(path.join(runs, run, "system-prompt.md"), "utf8"), calls[0].systemPrompt);
     assert.equal(calls[0].runDir, path.join(runs, run));
     assert.ok(ui.events.includes(`note: trace: .doppelblind/runs/${run}/trace.jsonl`));
@@ -227,7 +229,7 @@ describe("spec-flow", () => {
       runSpecFlow({ cwd: root, brief: "docs/briefs/greeting.md", ui, agent: fakeAgent({ title: "x", criteria: [] }) }),
       (err: DoppelblindError) => err.details.some((d) => /^Agent trace: \.doppelblind\/runs\/.*-spec-agent\/trace\.jsonl$/.test(d)),
     );
-    assert.ok(ui.events.includes("fail: Validating output against schema"));
+    assert.ok(ui.events.includes("fail: Validating output against schema (Agent output does not match its schema.)"));
     assert.ok(!existsSync(path.join(root, "specs")));
     assert.equal(readdirSync(path.join(root, ".doppelblind", "runs")).length, 1);
   });

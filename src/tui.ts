@@ -4,7 +4,8 @@ import { DoppelblindError } from "./errors.ts";
 
 export interface Step {
   done(detail?: string): void;
-  fail(): void;
+  /** Marks the step failed; the reason follows on the next line. */
+  fail(reason?: string): void;
 }
 
 /** What the flow reports while it runs. */
@@ -26,10 +27,13 @@ const LOGO = [
 ].join("\n");
 
 const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-const LABEL_WIDTH = 34;
+const LABEL_WIDTH = 40;
+/** Without a TTY a line cannot be redrawn, so a running step repeats its line with the time so far this often. */
+const TICK_MS = 10_000;
 
 /**
- * Minimal terminal UI: a logo, then one line per step; on a TTY the running step shows a spinner.
+ * Minimal terminal UI: a logo, then one line per step; the running step shows how long it has been running,
+ * on a TTY next to a spinner.
  * Choices are read from `input`, one line each: an option or its number.
  */
 export function terminalUi(stream: NodeJS.WriteStream = process.stderr, input: NodeJS.ReadableStream = process.stdin): Ui {
@@ -59,6 +63,7 @@ export function terminalUi(stream: NodeJS.WriteStream = process.stderr, input: N
         timer = setInterval(draw, 100);
       } else {
         stream.write(`${line("…")}\n`);
+        timer = setInterval(() => stream.write(`${line("…", elapsed(started))}\n`), TICK_MS);
       }
 
       const finish = (icon: string, detail?: string) => {
@@ -67,7 +72,10 @@ export function terminalUi(stream: NodeJS.WriteStream = process.stderr, input: N
       };
       return {
         done: (detail) => finish(style("green", "✔"), detail),
-        fail: () => finish(style("red", "✘")),
+        fail: (reason) => {
+          finish(style("red", "✘"), "failed");
+          if (reason) stream.write(`    ${style("red", reason)}\n`);
+        },
       };
     },
 
