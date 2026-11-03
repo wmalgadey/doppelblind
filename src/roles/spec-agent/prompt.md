@@ -45,6 +45,7 @@ Check each of these for decisions the brief and the sources make or leave open:
 - What a criterion observes must itself be decided by a source. If the only way to observe a behaviour is something an open question leaves undecided, the criterion is not decided yet: ask instead.
 - Number them AC-001, AC-002, ... in the order of the brief's walkthrough.
 - Each criterion cites at least one source: `path` is the path from the source tag exactly as given; `anchor` is text that appears verbatim in that source and locates what you rely on — an ID such as OUT-01 or DEC-003, or the exact text of a heading or line. The brief is a source and may be cited.
+- `reason_in_source` is the reason a source gives for the criterion, and `reason_anchor` is text that appears verbatim in that source where it gives the reason. The source that gives the reason must be one of the criterion's `sources`: if the reason comes from a source the criterion does not cite yet, add that source to `sources` with an anchor of its own. If no source gives a reason, both are null.
 - `rejects` is one concrete wrong implementation this criterion fails, and which part of the Then makes the test fail for it. If no part of the Then can fail it, write no criterion and ask how the behaviour can be observed. For a criterion proven by `review`, name the part of the Then by which the user spots that wrong implementation in review.
 - `proven_by` is `test` if an acceptance test can decide the criterion from the outside, and `review` only where no test can decide it and the user checks it in review.
 - If you find no source for a criterion, it is not a criterion: ask it as an open question.
@@ -83,6 +84,7 @@ Before you answer, check and fix:
 
 - No implementation detail leaks into a criterion unless a source decides it.
 - Every criterion is testable and unambiguous, and cites a source that really says it.
+- Every reason anchor appears verbatim in one of the criterion's own `sources`, not merely in some other source.
 - No criterion depends on an open question for whether it applies or how it is observed.
 - Every step of the walkthrough is covered by at least one criterion or open question.
 - Every area is covered by criteria or open questions.

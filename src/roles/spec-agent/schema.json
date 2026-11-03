@@ -45,7 +45,7 @@
           },
           "reason_anchor": {
             "type": ["string", "null"],
-            "description": "Text that appears verbatim in one of the criterion's cited sources, where that source gives the reason; null exactly when reason_in_source is null."
+            "description": "Text that appears verbatim in one of the criterion's cited sources, where that source gives the reason; if the reason comes from a source not yet cited, add that source to sources. Null exactly when reason_in_source is null."
           },
           "given": { "type": "string", "minLength": 1 },
           "when": { "type": "string", "minLength": 1 },
