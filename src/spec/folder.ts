@@ -3,7 +3,7 @@ import path from "node:path";
 
 export const SPEC_FILE = "spec.md";
 
-const NUMBERED = /^(\d{3,})-/;
+export const NUMBERED = /^(\d{3,})-/;
 
 /** Turns a title into a folder-safe slug, e.g. "Orchestrator mit Spec-Agent" → "orchestrator-mit-spec-agent". */
 export function slugify(title: string, maxLength = 50): string {

@@ -11,18 +11,18 @@ import {
   runTestAuthor,
   type TestAuthorResult,
 } from "./flow/test-author-flow.ts";
+import { briefTarget, specTarget } from "./flow/target.ts";
 import { terminalUi } from "./tui.ts";
 
 const USAGE = `Usage: doppelblind <command> <path>
 
 Commands:
-  feature <brief>       Start the flow for a new feature, or continue it: the spec agent until the spec
-                        is final, then the test author
-  spec <brief>          Hand the brief to the spec agent
-  tests <brief|spec>    Hand a final spec to the test author; name the brief connected to it,
-                        its spec.md or its folder
+  feature <brief|spec>  Start the flow for a new feature, or continue it: the spec agent until the spec
+                        is final, then the test author; a spec names the brief connected to it
+  spec <brief|spec>     Hand the brief to the spec agent
+  tests <brief|spec>    Hand a final spec to the test author
 
-Paths are relative to the current directory.
+A spec is its spec.md, its folder or its number (2, 02 or 002). Paths are relative to the current directory.
 
 Options:
   --timeout <min>   Time limit for each agent run in minutes
@@ -48,13 +48,15 @@ async function main(argv: string[]): Promise<number> {
     },
   });
 
-  const [command, brief, ...rest] = positionals;
+  const [command, target, ...rest] = positionals;
   if (values.help || !command) {
     process.stdout.write(USAGE);
     return values.help ? 0 : 2;
   }
   if (command !== "feature" && command !== "spec" && command !== "tests") return usageError(`Unknown command: ${command}`);
-  if (!brief || rest.length > 0) return usageError(`${command} expects exactly one path.`);
+  if (!target || rest.length > 0) return usageError(`${command} expects exactly one path.`);
+  // the tests command takes a spec as it is; the spec agent's commands work on the brief connected to it
+  const brief = command === "tests" ? specTarget(process.cwd(), target) : briefTarget(process.cwd(), target);
 
   const ui = terminalUi();
   ui.banner();

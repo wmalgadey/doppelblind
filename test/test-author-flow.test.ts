@@ -373,12 +373,12 @@ describe("test-author-flow", () => {
 });
 
 describe("cli", () => {
-  test("continuing the flow of a brief whose spec is final starts the test author", () => {
+  test.each([BRIEF_PATH, "1", "001", FOLDER])("continuing the flow of a brief whose spec is final starts the test author: %s", (target) => {
     const root = project({ spec: spec({ criteria: spec().criteria.slice(0, 2) }) });
     const cli = path.join(import.meta.dirname, "..", "src", "cli.ts");
     const fake = path.join(import.meta.dirname, "fixtures", "fake-claude.mjs");
     const stdout = JSON.stringify({ type: "result", subtype: "success", is_error: false, structured_output: { tests: [], assumptions: [] } });
-    const result = spawnSync(process.execPath, [cli, "feature", BRIEF_PATH], {
+    const result = spawnSync(process.execPath, [cli, "feature", target], {
       cwd: root,
       encoding: "utf8",
       env: { ...process.env, DOPPELBLIND_CLAUDE_BIN: fake, FAKE_CLAUDE_STDOUT: stdout },

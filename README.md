@@ -19,6 +19,8 @@ doppelblind spec docs/briefs/<brief>.md      # hand the brief to the spec agent
 doppelblind tests docs/briefs/<brief>.md     # hand the final spec to the test author (or name specs/NNN-…/spec.md)
 ```
 
+Instead of the brief, every command also takes its spec: `specs/NNN-…/spec.md`, the folder `specs/NNN-…` or just the number, with or without leading zeros (`doppelblind feature 2`, `doppelblind feature 002`). `feature` and `spec` then work on the brief the run state connects to that spec.
+
 `feature` runs the spec agent until the spec is final; run it again after that and it continues with the test author. The spec agent writes `specs/NNN-<short-name>/spec.md` with criteria in Given-When-Then, each proven by an acceptance test or by review, wishes and open questions; answer the open questions in that file.
 
 Each run keeps a folder in `.doppelblind/runs/<timestamp>-spec-agent/` with the agent's `system-prompt.md`, the user message in `input.md`, its limits and tools in `guardrails.json`, the validated output in `output.json`, the CLI call in `call.json` (binary, arguments, working directory, stdin, time limit, start, end and exit) and `trace.jsonl`, every event of the run as one JSON object per line. The trace is written while the agent works, so `tail -f` follows a run, and it is kept when a run fails.
