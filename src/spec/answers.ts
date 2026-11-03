@@ -19,14 +19,15 @@ const ANSWER_MARK = "**Answer:**";
 
 /**
  * Reads every question in a rendered spec.md or answers.md whose answer is neither empty, whitespace only,
- * nor the marker `unanswered`.
+ * nor the marker `unanswered`. Open questions are the last section of spec.md, so a question runs up to the
+ * next question heading; an answer may hold headings of its own.
  */
 export function readAnswers(markdown: string): Answer[] {
   const parts = markdown.split(QUESTION_HEADING);
   const answered: Answer[] = [];
   // split with a capture group yields [before, id, body, id, body, ...]
   for (let i = 1; i < parts.length; i += 2) {
-    const body = parts[i + 1].split(/^## /m)[0];
+    const body = parts[i + 1];
     const mark = body.indexOf(ANSWER_MARK);
     if (mark < 0) continue;
     const answer = body.slice(mark + ANSWER_MARK.length).trim();
@@ -48,7 +49,7 @@ export function fillAnswers(markdown: string, answers: { id: string; answer: str
     if (heading < 0) continue;
     const field = result.indexOf(ANSWER_MARK, heading) + ANSWER_MARK.length;
     const rest = result.slice(field);
-    const end = rest.search(/^#{2,3} /m);
+    const end = rest.search(QUESTION_HEADING);
     const current = (end < 0 ? rest : rest.slice(0, end)).trim();
     if (current !== "" && current !== UNANSWERED) continue;
     result = result.slice(0, field) + `\n\n${answer}\n\n` + (end < 0 ? "" : rest.slice(end));

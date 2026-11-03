@@ -55,4 +55,15 @@ describe("answers", () => {
       { id: "Q-03", question: "Who?", answer: "Me." },
     ]);
   });
+
+  test("an answer holding headings of its own is read and kept whole", () => {
+    const answer = "## Errors\n\nShow them.\n\n## Logs\n\nKeep them.";
+    const md = `## Open questions\n\n### Q-01\n\nWhy?\n\n**Answer:**\n\n${answer}\n\n### Q-02\n\nHow?\n\n**Answer:**\n\n\n`;
+    assert.deepEqual(readAnswers(md), [{ id: "Q-01", question: "Why?", answer }]);
+    const filled = fillAnswers(md, [{ id: "Q-01", answer: "free" }, { id: "Q-02", answer: "out of scope" }]);
+    assert.deepEqual(readAnswers(filled), [
+      { id: "Q-01", question: "Why?", answer },
+      { id: "Q-02", question: "How?", answer: "out of scope" },
+    ]);
+  });
 });
