@@ -16,7 +16,7 @@ describe("render", () => {
     assert.match(md, /^# Grüße für alle\n/);
     assert.match(md, /Brief: \[docs\/briefs\/greeting.md\]\(\.\.\/\.\.\/docs\/briefs\/greeting.md\)/);
     assert.match(md, /### AC-001: Greeter greets\n\n- \*\*Given\*\* the greeter is installed\n- \*\*When\*\* I run it\n- \*\*Then\*\* it prints a greeting/);
-    assert.match(md, /Sources: `docs\/briefs\/greeting.md` › ## Walkthrough/);
+    assert.match(md, /- \*\*Then\*\* it prints a greeting\n\nProven by: acceptance test\n\nSources: `docs\/briefs\/greeting.md` › ## Walkthrough/);
     assert.match(md, /## Wishes\n\n- A colourful greeting\./);
   });
 

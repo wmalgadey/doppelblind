@@ -39,6 +39,7 @@ Check each of these for decisions the brief and the sources make or leave open:
 - Each criterion is testable and unambiguous: concrete inputs, a concrete action, an observable result. A vague word ("fast", "secure", "simple", "nice", "minimal", "appropriate") is only allowed with a measurable value that a source decides; otherwise ask.
 - Number them AC-001, AC-002, ... in the order of the brief's walkthrough.
 - Each criterion cites at least one source: `path` is the path from the source tag exactly as given; `anchor` is text that appears verbatim in that source and locates what you rely on — an ID such as OUT-01 or DEC-003, or the exact text of a heading or line. The brief is a source and may be cited.
+- `proven_by` is `test` if an acceptance test can decide the criterion from the outside, and `review` only where no test can decide it and the user checks it in review.
 - If you find no source for a criterion, it is not a criterion: ask it as an open question.
 
 ## Wishes

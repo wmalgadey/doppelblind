@@ -13,6 +13,8 @@ export interface Criterion {
   given: string;
   when: string;
   then: string;
+  /** Whether an acceptance test proves the criterion, or the user's review where no test can decide it. */
+  proven_by: "test" | "review";
   sources: Citation[];
 }
 

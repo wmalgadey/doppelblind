@@ -48,6 +48,8 @@ export function renderSpec(spec: SpecOutput, briefPath: string, briefLink: strin
       `- **When** ${c.when}`,
       `- **Then** ${c.then}`,
       "",
+      `Proven by: ${c.proven_by === "review" ? "review" : "acceptance test"}`,
+      "",
       `Sources: ${c.sources.map((s) => `\`${s.path}\` › ${s.anchor}`).join("; ")}`,
       "",
     );

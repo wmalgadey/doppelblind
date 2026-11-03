@@ -64,6 +64,7 @@ export function sampleSpec(overrides: Partial<SpecOutput> = {}): SpecOutput {
         given: "the greeter is installed",
         when: "I run it",
         then: "it prints a greeting",
+        proven_by: "test",
         sources: [{ path: "docs/briefs/greeting.md", anchor: "## Walkthrough" }],
       },
     ],
