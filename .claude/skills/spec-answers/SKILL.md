@@ -1,11 +1,11 @@
 ---
-name: spec-answer
+name: spec-answers
 description: Walk through the open questions of a spec.md and write the user's answers into its Answer fields. Use when the user wants to answer the open questions of a spec.
 ---
 
 # Answer the open questions of a spec
 
-Answers are binding sources: the spec agent turns every answer into criteria, including examples and side remarks. You ask; the user decides. You never suggest, complete or rephrase an answer.
+Answers are binding sources: the spec agent turns every answer into criteria, including examples and side remarks. You ask and may offer suggested answers; the user decides. You never complete or rephrase an answer the user wrote.
 
 ## Unanswered questions
 
@@ -27,11 +27,28 @@ Ask with the AskUserQuestion tool, one question per call:
 
 - `header`: the question ID, e.g. `Q-03`.
 - `question`: starts with the position, e.g. `Question 4 of 21:`, then the question's text exactly as in spec.md, then its context line, then the IDs of the criteria whose "Open questions" line lists this question. If none does, say so.
-- `options`, exactly these two, in this order:
+- `options`, in this order:
+  - one or two suggested answers (see below)
   - label `free`, description `Left open on purpose; nobody tests it.`
   - label `out of scope`, description `Not part of this change.`
 
-The tool adds a free text field itself. Add no other options, and never an option that answers the question.
+The tool adds a free text field itself and allows at most four options, so offer at most two suggestions. Add no other options.
+
+## Suggested answers
+
+Before each question, look for what the project already says about it: docs such as `docs/product.md`, `docs/decisions.md` and the brief, the answers of other specs, and the code. Build one or two suggestions from that; where nothing is found, use a reasonable best guess.
+
+Each suggestion:
+
+- `label`: a short name for the answer, 1 to 5 words.
+- `preview`: the full answer text, exactly as it would be written into spec.md. It answers the question asked and contains no example ("e.g.", "for example", "such as", "z. B."), since the spec agent may make an example binding.
+- `description`: where the suggestion comes from, as a file path with the section or line, or `Best guess; nothing found in the project.`
+
+Never present a suggestion as decided: two suggestions must differ in substance, and you never pick one for the user.
+
+## Chosen suggestions
+
+When the user chooses a suggestion, its answer is the suggestion's `preview` text, unchanged. Do not write its label or description. If the user adds notes to the choice, ask whether the notes replace the suggestion, are appended to it, or are dropped, and treat any text that ends up in the answer as a free text answer.
 
 ## Free text answers
 
