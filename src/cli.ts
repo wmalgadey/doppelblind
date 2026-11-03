@@ -3,19 +3,33 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { DoppelblindError } from "./errors.ts";
 import { DEFAULT_BUDGET_USD, DEFAULT_TIMEOUT_MIN, runSpecFlow } from "./flow/spec-flow.ts";
+import {
+  briefIsFinal,
+  DEFAULT_TEST_AUTHOR_BUDGET_USD,
+  DEFAULT_TEST_AUTHOR_MAX_TURNS,
+  DEFAULT_TEST_AUTHOR_TIMEOUT_MIN,
+  runTestAuthor,
+  type TestAuthorResult,
+} from "./flow/test-author-flow.ts";
 import { terminalUi } from "./tui.ts";
 
-const USAGE = `Usage: doppelblind <command> <brief>
+const USAGE = `Usage: doppelblind <command> <path>
 
 Commands:
-  feature <brief>   Start the flow for a new feature, or continue it (for now: spec agent only)
-  spec <brief>      Hand the brief to the spec agent
+  feature <brief>       Start the flow for a new feature, or continue it: the spec agent until the spec
+                        is final, then the test author
+  spec <brief>          Hand the brief to the spec agent
+  tests <brief|spec>    Hand a final spec to the test author; name the brief connected to it,
+                        its spec.md or its folder
 
-<brief> is a path relative to the current directory.
+Paths are relative to the current directory.
 
 Options:
-  --timeout <min>   Time limit for the agent run in minutes (default: ${DEFAULT_TIMEOUT_MIN})
-  --budget <usd>    Cost limit for the agent run in USD (default: ${DEFAULT_BUDGET_USD})
+  --timeout <min>   Time limit for each agent run in minutes
+                    (default: spec agent ${DEFAULT_TIMEOUT_MIN}, test author ${DEFAULT_TEST_AUTHOR_TIMEOUT_MIN})
+  --budget <usd>    Cost limit for each agent run in USD
+                    (default: spec agent ${DEFAULT_BUDGET_USD}, test author ${DEFAULT_TEST_AUTHOR_BUDGET_USD})
+  --max-turns <n>   Turn limit for the test author (default: ${DEFAULT_TEST_AUTHOR_MAX_TURNS}); it is never raised
   -h, --help        Show this help
 
 Environment:
@@ -30,6 +44,7 @@ async function main(argv: string[]): Promise<number> {
       help: { type: "boolean", short: "h" },
       timeout: { type: "string" },
       budget: { type: "string" },
+      "max-turns": { type: "string" },
     },
   });
 
@@ -38,11 +53,26 @@ async function main(argv: string[]): Promise<number> {
     process.stdout.write(USAGE);
     return values.help ? 0 : 2;
   }
-  if (command !== "feature" && command !== "spec") return usageError(`Unknown command: ${command}`);
-  if (!brief || rest.length > 0) return usageError(`${command} expects exactly one brief path.`);
+  if (command !== "feature" && command !== "spec" && command !== "tests") return usageError(`Unknown command: ${command}`);
+  if (!brief || rest.length > 0) return usageError(`${command} expects exactly one path.`);
 
   const ui = terminalUi();
   ui.banner();
+  // continuing the flow of a brief whose spec is final is the test author's step
+  if (command === "tests" || (command === "feature" && briefIsFinal(process.cwd(), brief))) {
+    const result = await runTestAuthor({
+      cwd: process.cwd(),
+      target: brief,
+      ui,
+      timeoutMs: positiveNumber("--timeout", values.timeout, DEFAULT_TEST_AUTHOR_TIMEOUT_MIN) * 60_000,
+      maxBudgetUsd: positiveNumber("--budget", values.budget, DEFAULT_TEST_AUTHOR_BUDGET_USD),
+      maxTurns: positiveInteger("--max-turns", values["max-turns"], DEFAULT_TEST_AUTHOR_MAX_TURNS),
+    });
+    reportTests(result);
+    return 0;
+  }
+  if (values["max-turns"] !== undefined) return usageError("--max-turns applies only to the test author.");
+
   const result = await runSpecFlow({
     cwd: process.cwd(),
     brief,
@@ -70,18 +100,43 @@ async function main(argv: string[]): Promise<number> {
           : result.openQuestions > 0
             ? next
             : "") +
-      (result.status === "final" || (result.openQuestions === 0 && result.stopped.length === 0)
-        ? "  The flow ends here: no further role exists yet.\n"
-        : ""),
+      (result.status === "final" ? `  Next: run \`doppelblind feature ${brief}\` again; the test author writes the acceptance tests.\n` : ""),
   );
   process.stdout.write(`${specFile}\n`);
   return 0;
+}
+
+/** The final output of a test author run: what it produced, what it assumed, and what the user must decide. */
+function reportTests(result: TestAuthorResult): void {
+  const lines = ["", `  The test author produced for ${result.spec}:`];
+  for (const t of result.tests) lines.push(`    ${t.file}  (${t.criterion})`);
+  for (const h of result.helpers) lines.push(`    ${h}  (helper)`);
+  lines.push(result.review ? `    ${result.review}  (review file)` : "  The spec has no criterion proven by review; no review file was written.");
+  if (result.assumptions.length > 0) {
+    lines.push(`  Assumptions (${result.assumptions.length}):`);
+    for (const a of result.assumptions) lines.push(`    - ${a.criterion}: ${a.assumption}`);
+  }
+  if (!result.passing) lines.push("  The tests were not run: the project declares no test command.");
+  else if (result.passing.length > 0) {
+    lines.push("  Passing before any implementation; decide whether the behaviour exists or the test must be rejected:");
+    for (const p of result.passing) lines.push(`    - ${p.criterion}: ${p.file}`);
+  }
+  lines.push(result.lock ? `  Locked: ${result.lock}` : "  Not locked: run the test author again to replace these files.");
+  process.stderr.write(lines.join("\n") + "\n");
+  const produced = [...result.tests.map((t) => t.file), ...result.helpers, ...(result.review ? [result.review] : [])];
+  process.stdout.write(produced.map((f) => `${f}\n`).join(""));
 }
 
 function positiveNumber(flag: string, value: string | undefined, fallback: number): number {
   if (value === undefined) return fallback;
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) throw new DoppelblindError(`${flag} expects a positive number.`);
+  return n;
+}
+
+function positiveInteger(flag: string, value: string | undefined, fallback: number): number {
+  const n = positiveNumber(flag, value, fallback);
+  if (!Number.isInteger(n)) throw new DoppelblindError(`${flag} expects a positive whole number.`);
   return n;
 }
 
@@ -94,7 +149,8 @@ main(process.argv.slice(2)).then(
   (code) => process.exit(code),
   (err) => {
     if (err instanceof DoppelblindError || (err as NodeJS.ErrnoException).code?.startsWith("ERR_PARSE_ARGS")) {
-      process.stderr.write(`\n  ${(err as Error).message}\n`);
+      // a message the failed step already showed is not repeated
+      if (!(err as DoppelblindError).shown) process.stderr.write(`\n  ${(err as Error).message}\n`);
       for (const line of (err as DoppelblindError).details ?? []) process.stderr.write(`    - ${line}\n`);
     } else {
       process.stderr.write(`\n${(err as Error).stack ?? err}\n`);
