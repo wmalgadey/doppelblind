@@ -89,6 +89,15 @@ describe("claude", () => {
     assert.ok(call.endedAt);
   });
 
+  test("a run that ignores SIGTERM is killed after a bounded grace period", async () => {
+    useFake(SUCCESS);
+    process.env.FAKE_CLAUDE_SLEEP_MS = "5000";
+    process.env.FAKE_CLAUDE_IGNORE_SIGTERM = "1";
+    const started = Date.now();
+    await assert.rejects(runClaude({ ...request, timeoutMs: 100 }), /did not finish within/);
+    assert.ok(Date.now() - started < 3_000);
+  });
+
   test("a missing CLI is reported with a hint", async () => {
     process.env.DOPPELBLIND_CLAUDE_BIN = "/nonexistent/claude";
     await assert.rejects(runClaude(request), (err: DoppelblindError) => err.message.includes("not found"));

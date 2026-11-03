@@ -3,6 +3,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
 const stdin = readFileSync(0, "utf8");
+if (process.env.FAKE_CLAUDE_IGNORE_SIGTERM) process.on("SIGTERM", () => {});
 if (process.env.FAKE_CLAUDE_RECORD) {
   writeFileSync(process.env.FAKE_CLAUDE_RECORD, JSON.stringify({ args: process.argv.slice(2), cwd: process.cwd(), stdin }));
 }

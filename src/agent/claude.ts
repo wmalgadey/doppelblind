@@ -114,9 +114,27 @@ function run(bin: string, args: string[], cwd: string, input: string, timeoutMs:
     let stdout = "";
     let stderr = "";
     let timedOut = false;
-    const timer = setTimeout(() => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let forceKillTimer: ReturnType<typeof setTimeout> | undefined;
+    const timeoutError = new DoppelblindError(`Agent did not finish within ${Math.round(timeoutMs / 1000)}s.`);
+    const clearTimers = () => {
+      clearTimeout(timer);
+      if (forceKillTimer) clearTimeout(forceKillTimer);
+    };
+    const rejectOnce = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimers();
+      reject(err);
+    };
+    timer = setTimeout(() => {
       timedOut = true;
       child.kill("SIGTERM");
+      forceKillTimer = setTimeout(() => {
+        child.kill("SIGKILL");
+        rejectOnce(timeoutError);
+      }, 1_000);
     }, timeoutMs);
 
     child.stdout.setEncoding("utf8");
@@ -126,17 +144,17 @@ function run(bin: string, args: string[], cwd: string, input: string, timeoutMs:
     });
     child.stderr.on("data", (chunk) => (stderr += chunk));
     child.on("error", (err: NodeJS.ErrnoException) => {
-      clearTimeout(timer);
-      reject(
-        err.code === "ENOENT"
+      rejectOnce(timedOut ? timeoutError : err.code === "ENOENT"
           ? new DoppelblindError(`Agent CLI not found: ${bin}`, ["Install Claude Code or set DOPPELBLIND_CLAUDE_BIN."])
-          : err,
-      );
+          : err);
     });
     child.on("close", (code) => {
-      clearTimeout(timer);
-      if (timedOut) reject(new DoppelblindError(`Agent did not finish within ${Math.round(timeoutMs / 1000)}s.`));
-      else resolve({ stdout, stderr, code });
+      if (timedOut) rejectOnce(timeoutError);
+      else if (!settled) {
+        settled = true;
+        clearTimers();
+        resolve({ stdout, stderr, code });
+      }
     });
     child.stdin.on("error", () => {}); // the child may exit before reading its input
     child.stdin.end(input);
