@@ -92,6 +92,9 @@ export function parseResponse(stdout: string, stderr: string, code: number | nul
     }
     throw new DoppelblindError("Agent run failed.", [reason]);
   }
+  if (code !== 0) {
+    throw new DoppelblindError(`Agent CLI exited with code ${code} after a successful result.`, stderr.trim().split("\n").slice(-5));
+  }
   if (result.structured_output === undefined) {
     throw new DoppelblindError("Agent returned no structured output.");
   }
@@ -142,6 +145,7 @@ function run(bin: string, args: string[], cwd: string, input: string, timeoutMs:
 
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
+      if (settled) return; // the trace is closed once the run was given up
       stdout += chunk;
       onStdout?.(chunk);
     });

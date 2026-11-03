@@ -116,5 +116,7 @@ describe("claude", () => {
       (err) => err instanceof AgentLimitError && err.limit === "budget" && err.message === "Agent run failed.",
     );
     assert.throws(() => parseResponse(JSON.stringify({ type: "result", subtype: "success", is_error: false }), "", 0), /no structured output/);
+    assert.throws(() => parseResponse(SUCCESS, "killed", 1), /exited with code 1 after a successful result/);
+    assert.throws(() => parseResponse(SUCCESS, "", null), /exited with code null/);
   });
 });
