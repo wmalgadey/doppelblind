@@ -5,7 +5,7 @@ import { renderSpec } from "../src/spec/render.ts";
 import { sampleSpec } from "./helpers.ts";
 
 describe("answers", () => {
-  test("readAnswers reads answered questions without their context lines", () => {
+  test("readAnswers reads answered questions with their context apart from the question's text", () => {
     const spec = sampleSpec({
       open_questions: [
         { id: "Q-01", question: "Which words?", concerns: ["AC-001"], context: "I run the greeter." },
@@ -16,9 +16,11 @@ describe("answers", () => {
       .replace("**Answer:**\n", "**Answer:**\n\nHello.\n\nAnd welcome.\n")
       .replace(/\*\*Answer:\*\*\n$/, "**Answer:**\n\nBlue.\n");
     assert.deepEqual(readAnswers(md), [
-      { id: "Q-01", question: "Which words?", answer: "Hello.\n\nAnd welcome." },
+      { id: "Q-01", question: "Which words?", answer: "Hello.\n\nAnd welcome.", context: "I run the greeter." },
       { id: "Q-02", question: "Which colour?", answer: "Blue." },
     ]);
+    // answers.md keeps the context, so that it is read back the same way
+    assert.deepEqual(readAnswers(renderAnswerLog(readAnswers(md))), readAnswers(md));
   });
 
   test("readAnswers skips questions with an empty or whitespace-only answer", () => {

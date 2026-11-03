@@ -2,7 +2,7 @@
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { DoppelblindError } from "./errors.ts";
-import { DEFAULT_BUDGET_USD, DEFAULT_TIMEOUT_MIN, runSpecFlow } from "./flow/spec-flow.ts";
+import { DEFAULT_BUDGET_USD, DEFAULT_TIMEOUT_MIN, runSpecFlow, type BriefGaps } from "./flow/spec-flow.ts";
 import {
   briefIsFinal,
   DEFAULT_TEST_AUTHOR_BUDGET_USD,
@@ -30,6 +30,12 @@ Options:
   --budget <usd>    Cost limit for each agent run in USD
                     (default: spec agent ${DEFAULT_BUDGET_USD}, test author ${DEFAULT_TEST_AUTHOR_BUDGET_USD})
   --max-turns <n>   Turn limit for the test author (default: ${DEFAULT_TEST_AUTHOR_MAX_TURNS}); it is never raised
+
+A project changes these defaults in the "limits" object of .doppelblind.conf:
+  { "limits": { "specAgent": { "timeoutMin": 5, "budgetUsd": 1 },
+                "testAuthor": { "timeoutMin": 15, "budgetUsd": 5, "maxTurns": 80 },
+                "testFileTimeoutMin": 2, "maxFreeAnswers": 5 } }
+An option given at the start of a run overrides the project's default.
   -h, --help        Show this help
 
 Environment:
@@ -66,9 +72,8 @@ async function main(argv: string[]): Promise<number> {
       cwd: process.cwd(),
       target: brief,
       ui,
-      timeoutMs: positiveNumber("--timeout", values.timeout, DEFAULT_TEST_AUTHOR_TIMEOUT_MIN) * 60_000,
-      maxBudgetUsd: positiveNumber("--budget", values.budget, DEFAULT_TEST_AUTHOR_BUDGET_USD),
-      maxTurns: positiveInteger("--max-turns", values["max-turns"], DEFAULT_TEST_AUTHOR_MAX_TURNS),
+      ...limitOptions(values),
+      maxTurns: positiveInteger("--max-turns", values["max-turns"]),
     });
     reportTests(result);
     return 0;
@@ -79,8 +84,7 @@ async function main(argv: string[]): Promise<number> {
     cwd: process.cwd(),
     brief,
     ui,
-    timeoutMs: positiveNumber("--timeout", values.timeout, DEFAULT_TIMEOUT_MIN) * 60_000,
-    maxBudgetUsd: positiveNumber("--budget", values.budget, DEFAULT_BUDGET_USD),
+    ...limitOptions(values),
     clarify: command === "feature",
   });
 
@@ -104,8 +108,41 @@ async function main(argv: string[]): Promise<number> {
             : "") +
       (result.status === "final" ? `  Next: run \`doppelblind feature ${brief}\` again; the test author writes the acceptance tests.\n` : ""),
   );
+  if (result.briefGaps) reportBriefGaps(brief, result.briefGaps, result.status === "final");
   process.stdout.write(`${specFile}\n`);
   return 0;
+}
+
+/**
+ * The brief leaves too much undecided: names each question answered `free`, grouped by the step of the brief it is
+ * about, as the decisions to add to the brief.
+ */
+function reportBriefGaps(brief: string, gaps: BriefGaps, final: boolean): void {
+  const byStep = new Map<string, BriefGaps["questions"]>();
+  for (const q of gaps.questions) {
+    const step = q.context ?? "No step named";
+    byStep.set(step, [...(byStep.get(step) ?? []), q]);
+  }
+  const lines = [
+    "",
+    `  ${brief} is too vague: ${gaps.questions.length} questions were answered free, more than the ${gaps.maxFreeAnswers} the project allows.`,
+    "  Nobody tests a decision left free. Add to the brief what applies for these questions:",
+  ];
+  for (const [step, questions] of byStep) {
+    lines.push(`    ${step}`);
+    for (const q of questions) lines.push(`      - ${q.id}: ${q.question}`);
+  }
+  lines.push(final
+    ? "  The spec step is already final: the extended brief reaches the spec agent only in a new spec-create run."
+    : `  Then run \`doppelblind spec ${brief}\` for a new spec-create run with the extended brief.`);
+  process.stderr.write(lines.join("\n") + "\n");
+}
+
+/** The time and cost limits given as options; a limit not given is left to the project's contract or the default. */
+function limitOptions(values: { timeout?: string; budget?: string }): { timeoutMs?: number; maxBudgetUsd?: number } {
+  const timeout = positiveNumber("--timeout", values.timeout);
+  const budget = positiveNumber("--budget", values.budget);
+  return { ...(timeout !== undefined && { timeoutMs: timeout * 60_000 }), ...(budget !== undefined && { maxBudgetUsd: budget }) };
 }
 
 /** The final output of a test author run: what it produced, what it assumed, and what the user must decide. */
@@ -136,16 +173,16 @@ function reportTests(result: TestAuthorResult): void {
   process.stdout.write(produced.map((f) => `${f}\n`).join(""));
 }
 
-function positiveNumber(flag: string, value: string | undefined, fallback: number): number {
-  if (value === undefined) return fallback;
+function positiveNumber(flag: string, value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) throw new DoppelblindError(`${flag} expects a positive number.`);
   return n;
 }
 
-function positiveInteger(flag: string, value: string | undefined, fallback: number): number {
-  const n = positiveNumber(flag, value, fallback);
-  if (!Number.isInteger(n)) throw new DoppelblindError(`${flag} expects a positive whole number.`);
+function positiveInteger(flag: string, value: string | undefined): number | undefined {
+  const n = positiveNumber(flag, value);
+  if (n !== undefined && !Number.isInteger(n)) throw new DoppelblindError(`${flag} expects a positive whole number.`);
   return n;
 }
 

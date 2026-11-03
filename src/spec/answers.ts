@@ -3,6 +3,8 @@ export interface Answer {
   id: string;
   question: string;
   answer: string;
+  /** The step of the brief the question is about, if the spec agent named one. */
+  context?: string;
 }
 
 export const ANSWERS_FILE = "answers.md";
@@ -32,8 +34,10 @@ export function readAnswers(markdown: string): Answer[] {
     if (mark < 0) continue;
     const answer = body.slice(mark + ANSWER_MARK.length).trim();
     if (answer === "" || answer === UNANSWERED) continue;
-    const question = body.slice(0, mark).replace(/^_(Context|Depends on): .*_$/gm, "").trim();
-    answered.push({ id: parts[i], question, answer });
+    const head = body.slice(0, mark);
+    const question = head.replace(/^_(Context|Depends on): .*_$/gm, "").trim();
+    const context = /^_Context: (.*)_$/m.exec(head)?.[1].trim();
+    answered.push({ id: parts[i], question, answer, ...(context && { context }) });
   }
   return answered;
 }
@@ -59,7 +63,7 @@ export function fillAnswers(markdown: string, answers: { id: string; answer: str
 
 /** Renders answers.md: every answer given so far, in the layout `readAnswers` reads back. */
 export function renderAnswerLog(answers: Answer[]): string {
-  const lines = answers.flatMap((q) => [`### ${q.id}`, "", q.question, "", ANSWER_MARK, "", q.answer, ""]);
+  const lines = answers.flatMap((q) => [`### ${q.id}`, "", q.question, "", ...(q.context ? [`_Context: ${q.context}_`, ""] : []), ANSWER_MARK, "", q.answer, ""]);
   return ["# Answers", "", ...lines].join("\n").trimEnd() + "\n";
 }
 

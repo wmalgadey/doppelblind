@@ -19,6 +19,18 @@ export interface Contract {
   acceptanceTests?: string;
   /** Command that runs one test file, with `{file}` for its path; without `{file}`, the path is appended. */
   testCommand?: string;
+  /** The project's defaults for the limits; an option given at the start of a run overrides them. */
+  limits: ContractLimits;
+}
+
+/** Limits a project may declare; each one left out falls back to Doppelblind's own default. */
+export interface ContractLimits {
+  specAgent?: { timeoutMin?: number; budgetUsd?: number };
+  testAuthor?: { timeoutMin?: number; budgetUsd?: number; maxTurns?: number };
+  /** Time limit for each test file in the orchestrator's own test run. */
+  testFileTimeoutMin?: number;
+  /** How many questions of a spec may be answered `free` before the brief counts as too vague. */
+  maxFreeAnswers?: number;
 }
 
 const DEFAULTS = { sources: ["docs/product.md", "docs/decisions.md"], specs: "specs" };
@@ -26,7 +38,7 @@ const DEFAULTS = { sources: ["docs/product.md", "docs/decisions.md"], specs: "sp
 /** Finds the project root (the nearest directory with a contract file) and loads its contract. */
 export function loadContract(cwd: string): Contract {
   const root = findRoot(cwd);
-  if (!root) return { root: cwd, ...DEFAULTS };
+  if (!root) return { root: cwd, ...DEFAULTS, limits: {} };
 
   const file = path.join(root, CONTRACT_FILE);
   let raw: unknown;
@@ -39,7 +51,7 @@ export function loadContract(cwd: string): Contract {
     throw new DoppelblindError(`${file} must contain a JSON object.`);
   }
 
-  const { sources = DEFAULTS.sources, specs = DEFAULTS.specs, implementation, plan, acceptanceTests, testCommand } =
+  const { sources = DEFAULTS.sources, specs = DEFAULTS.specs, implementation, plan, acceptanceTests, testCommand, limits } =
     raw as Record<string, unknown>;
   if (!Array.isArray(sources) || !sources.every((s) => typeof s === "string")) {
     throw new DoppelblindError(`${file}: "sources" must be a list of paths.`);
@@ -60,6 +72,7 @@ export function loadContract(cwd: string): Contract {
   const project = (p: string) => toProjectPath(root, path.resolve(root, p));
   return {
     root,
+    limits: parseLimits(file, limits),
     sources: sources.map(project),
     specs: project(specs),
     ...(implementation !== undefined && { implementation: (implementation as string[]).map(project) }),
@@ -67,6 +80,43 @@ export function loadContract(cwd: string): Contract {
     ...(acceptanceTests !== undefined && { acceptanceTests: project(acceptanceTests as string) }),
     ...(testCommand !== undefined && { testCommand: testCommand as string }),
   };
+}
+
+const LIMIT_KEYS = {
+  specAgent: { timeoutMin: "number", budgetUsd: "number" },
+  testAuthor: { timeoutMin: "number", budgetUsd: "number", maxTurns: "integer" },
+} as const;
+
+/** Reads the `limits` object: every value is a positive number, turn limits whole; `maxFreeAnswers` may be 0. */
+function parseLimits(file: string, raw: unknown): ContractLimits {
+  if (raw === undefined) return {};
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new DoppelblindError(`${file}: "limits" must be an object.`);
+  const value = (key: string, v: unknown, kind: "number" | "integer", min = Number.MIN_VALUE): number => {
+    if (typeof v !== "number" || !Number.isFinite(v) || v < min || (kind === "integer" && !Number.isInteger(v))) {
+      throw new DoppelblindError(`${file}: "limits.${key}" must be a ${kind === "integer" ? "whole number" : "number"} ${min === 0 ? "of 0 or more" : "above 0"}.`);
+    }
+    return v;
+  };
+  const result: ContractLimits = {};
+  for (const [key, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (key === "specAgent" || key === "testAuthor") {
+      if (typeof v !== "object" || v === null || Array.isArray(v)) throw new DoppelblindError(`${file}: "limits.${key}" must be an object.`);
+      const fields = LIMIT_KEYS[key] as Record<string, "number" | "integer">;
+      const parsed: Record<string, number> = {};
+      for (const [field, fv] of Object.entries(v as Record<string, unknown>)) {
+        if (!(field in fields)) throw new DoppelblindError(`${file}: "limits.${key}.${field}" is not a limit; known: ${Object.keys(fields).join(", ")}.`);
+        parsed[field] = value(`${key}.${field}`, fv, fields[field]);
+      }
+      result[key] = parsed;
+    } else if (key === "testFileTimeoutMin") {
+      result.testFileTimeoutMin = value(key, v, "number");
+    } else if (key === "maxFreeAnswers") {
+      result.maxFreeAnswers = value(key, v, "integer", 0);
+    } else {
+      throw new DoppelblindError(`${file}: "limits.${key}" is not a limit; known: specAgent, testAuthor, testFileTimeoutMin, maxFreeAnswers.`);
+    }
+  }
+  return result;
 }
 
 /** Converts an absolute path to a project-relative POSIX path; rejects paths outside the project. */

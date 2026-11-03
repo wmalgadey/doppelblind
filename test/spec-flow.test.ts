@@ -245,7 +245,7 @@ describe("spec-flow", () => {
     assert.deepEqual(readdirSync(path.join(runs, run)).sort(), ["guardrails.json", "input.md", "output.json", "system-prompt.md", "trace.jsonl"]);
     assert.equal(readFileSync(path.join(runs, run, "input.md"), "utf8"), calls[0].userMessage);
     const guardrails = JSON.parse(readFileSync(path.join(runs, run, "guardrails.json"), "utf8"));
-    assert.deepEqual(guardrails, { timeoutMs: 15 * 60_000, maxBudgetUsd: 5, maxTurns: null, tools: [] });
+    assert.deepEqual(guardrails, { timeoutMs: 5 * 60_000, maxBudgetUsd: 1, maxTurns: null, tools: [] });
     assert.equal(readFileSync(path.join(runs, run, "system-prompt.md"), "utf8"), calls[0].systemPrompt);
     assert.equal(calls[0].runDir, path.join(runs, run));
     assert.ok(ui.events.includes(`note: trace: .doppelblind/runs/${run}/trace.jsonl`));
@@ -440,6 +440,56 @@ describe("spec-flow: continuing a feature", () => {
     assert.equal(result.leftOpen, 2);
     const md = readFileSync(result.specFile, "utf8");
     assert.match(md, /## Left open\n\n- Q-01: Which words does the greeting use\?\n- Q-02: Which colour is the greeting\?\n/);
+  });
+
+  test("more questions answered free than the contract allows report the brief as too vague, with each question and its step", async () => {
+    const withContext = sampleSpec({
+      open_questions: [
+        { id: "Q-01", question: "Which words does the greeting use?", concerns: ["AC-001"], context: "I run the greeter." },
+        { id: "Q-02", question: "Which colour is the greeting?", concerns: [] },
+      ],
+    });
+    const { root } = await firstSpecCreateRun(withContext);
+    writeFileSync(path.join(root, ".doppelblind.conf"), JSON.stringify({ ...JSON.parse(CONTRACT), limits: { maxFreeAnswers: 1 } }));
+    const { ui, run } = feature(root, ["free", "free", "answer"], fakeAgent(sampleSpec({ open_questions: [] })));
+    const result = await run;
+    assert.deepEqual(result.briefGaps, {
+      maxFreeAnswers: 1,
+      questions: [
+        { id: "Q-01", question: "Which words does the greeting use?", context: "I run the greeter." },
+        { id: "Q-02", question: "Which colour is the greeting?" },
+      ],
+    });
+    assert.ok(ui.events.includes("note: 2 questions answered free, more than the 1 allowed: docs/briefs/greeting.md is too vague"));
+    // the context stays with the answer in answers.md, so that a later run still names the step
+    assert.match(readFileSync(path.join(root, "specs/001-greet-everyone/answers.md"), "utf8"), /### Q-01\n\nWhich words does the greeting use\?\n\n_Context: I run the greeter\._\n/);
+  });
+
+  test("up to the allowed number of free answers, and by default up to five, the brief is not reported", async () => {
+    const { root } = await firstSpecCreateRun();
+    const { run } = feature(root, ["free", "free", "answer"], fakeAgent(sampleSpec({ open_questions: [] })));
+    assert.equal((await run).briefGaps, undefined);
+
+    const limited = await firstSpecCreateRun();
+    writeFileSync(path.join(limited.root, ".doppelblind.conf"), JSON.stringify({ ...JSON.parse(CONTRACT), limits: { maxFreeAnswers: 2 } }));
+    const second = feature(limited.root, ["free", "free", "answer"], fakeAgent(sampleSpec({ open_questions: [] })));
+    assert.equal((await second.run).briefGaps, undefined);
+  });
+
+  test("the spec agent's limits come from the contract unless given as options", async () => {
+    const root = project();
+    writeFileSync(path.join(root, ".doppelblind.conf"), JSON.stringify({ ...JSON.parse(CONTRACT), limits: { specAgent: { timeoutMin: 3, budgetUsd: 0.5 } } }));
+    const calls: AgentRequest[] = [];
+    await runSpecFlow({ cwd: root, brief: BRIEF_PATH, ui: recordingUi(), agent: fakeAgent(sampleSpec(), calls) });
+    assert.equal(calls[0].timeoutMs, 3 * 60_000);
+    assert.equal(calls[0].maxBudgetUsd, 0.5);
+
+    const other = project();
+    writeFileSync(path.join(other, ".doppelblind.conf"), JSON.stringify({ ...JSON.parse(CONTRACT), limits: { specAgent: { timeoutMin: 3, budgetUsd: 0.5 } } }));
+    const given: AgentRequest[] = [];
+    await runSpecFlow({ cwd: other, brief: BRIEF_PATH, ui: recordingUi(), agent: fakeAgent(sampleSpec(), given), timeoutMs: 60_000, maxBudgetUsd: 2 });
+    assert.equal(given[0].timeoutMs, 60_000);
+    assert.equal(given[0].maxBudgetUsd, 2);
   });
 
   test("out of scope is stored in answers.md as the user's answer", async () => {

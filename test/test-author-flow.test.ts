@@ -351,6 +351,26 @@ describe("test-author-flow", () => {
     assert.ok(existsSync(path.join(dir, "test-run.json")));
   });
 
+  test("the test author's limits and the time limit of each test file come from the contract unless given as options", async () => {
+    const root = project({ contract: { ...CONTRACT, limits: { testAuthor: { timeoutMin: 4, budgetUsd: 2, maxTurns: 9 }, testFileTimeoutMin: 1 } } });
+    const calls: AgentRequest[] = [];
+    await runTestAuthor({ cwd: root, target: BRIEF_PATH, ui: recordingUi(["keep unlocked"]), agent: fakeAgents(undefined, calls) });
+    const call = testAuthorCall(calls);
+    assert.deepEqual([call.timeoutMs, call.maxBudgetUsd, call.maxTurns], [4 * 60_000, 2, 9]);
+
+    const given: AgentRequest[] = [];
+    const other = project({ contract: { ...CONTRACT, limits: { testAuthor: { timeoutMin: 4, budgetUsd: 2, maxTurns: 9 } } } });
+    await runTestAuthor({ cwd: other, target: BRIEF_PATH, ui: recordingUi(["keep unlocked"]), agent: fakeAgents(undefined, given), timeoutMs: 60_000, maxBudgetUsd: 3, maxTurns: 20 });
+    const overridden = testAuthorCall(given);
+    assert.deepEqual([overridden.timeoutMs, overridden.maxBudgetUsd, overridden.maxTurns], [60_000, 3, 20]);
+
+    // without a contract value or an option, the defaults apply
+    const plain: AgentRequest[] = [];
+    await runTestAuthor({ cwd: project(), target: BRIEF_PATH, ui: recordingUi(["keep unlocked"]), agent: fakeAgents(undefined, plain) });
+    const defaults = testAuthorCall(plain);
+    assert.deepEqual([defaults.timeoutMs, defaults.maxBudgetUsd, defaults.maxTurns], [15 * 60_000, 5, 80]);
+  });
+
   test("at the time or cost limit the user is asked; a raise retries from scratch, a refusal writes nothing to the project", async () => {
     for (const limit of ["time", "budget"] as const) {
       const root = project();

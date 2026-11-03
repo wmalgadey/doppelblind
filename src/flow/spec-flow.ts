@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { runClaude, TRACE_FILE, type Agent } from "../agent/claude.ts";
-import { loadContract, toProjectPath } from "../contract.ts";
+import { loadContract, toProjectPath, type Contract } from "../contract.ts";
 import { DoppelblindError } from "../errors.ts";
 import { validateOutput } from "../gates/schema.ts";
 import { checkSpec } from "../gates/spec.ts";
@@ -41,6 +41,13 @@ export interface SpecFlowOptions {
   clarify?: boolean;
 }
 
+/** The brief counts as too vague: more questions were answered `free` than the project allows. */
+export interface BriefGaps {
+  maxFreeAnswers: number;
+  /** Every question answered `free`, with the step of the brief it is about where known. */
+  questions: { id: string; question: string; context?: string }[];
+}
+
 export interface SpecFlowResult {
   specFile: string;
   status: SpecStatus;
@@ -54,13 +61,16 @@ export interface SpecFlowResult {
    * The flow ended there without writing anything for them.
    */
   stopped: string[];
+  /** Set when more questions were answered `free` than `maxFreeAnswers` allows. */
+  briefGaps?: BriefGaps;
 }
 
 /** The validated output of a spec-agent run with its questions renumbered for the brief, kept in its run folder. */
 const OUTPUT_FILE = "output.json";
 
-export const DEFAULT_TIMEOUT_MIN = 15;
-export const DEFAULT_BUDGET_USD = 5;
+export const DEFAULT_TIMEOUT_MIN = 5;
+export const DEFAULT_BUDGET_USD = 1;
+export const DEFAULT_MAX_FREE_ANSWERS = 5;
 
 const STOP = "stop";
 const FINISH = "finish";
@@ -69,6 +79,7 @@ const UNANSWERED = "unanswered";
 
 interface Context {
   root: string;
+  limits: Contract["limits"];
   specsDir: string;
   briefPath: string;
   sources: LoadedSources;
@@ -92,7 +103,7 @@ export async function runSpecFlow(options: SpecFlowOptions): Promise<SpecFlowRes
     (s) => s.others.map((x) => x.path).join(", ") || "brief only");
   for (const p of sources.missing) ui.note(`declared source not found, skipped: ${p}`);
 
-  const ctx = { root: contract.root, specsDir: path.join(contract.root, contract.specs), briefPath, sources, options };
+  const ctx = { root: contract.root, limits: contract.limits, specsDir: path.join(contract.root, contract.specs), briefPath, sources, options };
   const recorded = readState(contract.root)[briefPath];
   if (recorded?.final) {
     throw new DoppelblindError(`The spec step of ${briefPath} is final; no further spec-create run starts.`, [`Spec: ${recorded.folder}/${SPEC_FILE}`]);
@@ -100,9 +111,24 @@ export async function runSpecFlow(options: SpecFlowOptions): Promise<SpecFlowRes
   const previous = recorded && readPrevious(contract.root, briefPath, recorded.folder);
   if (!previous || !options.clarify) {
     if (previous) noteRerun(ui, previous);
-    return specCreate(ctx, recorded, previous);
+    return withBriefGaps(ctx, await specCreate(ctx, recorded, previous));
   }
-  return clarify(ctx, recorded, previous);
+  return withBriefGaps(ctx, await clarify(ctx, recorded, previous));
+}
+
+/** A flow's result, with the answers `free` it counts. */
+type Outcome = SpecFlowResult & { freeAnswers: Answer[] };
+
+/**
+ * Many questions answered `free` mean the brief leaves much undecided that the spec then leaves untested. Above the
+ * project's limit, the result names every such question, so that the user can add those decisions to the brief.
+ */
+function withBriefGaps(ctx: Context, result: Outcome): SpecFlowResult {
+  const { freeAnswers, ...rest } = result;
+  const maxFreeAnswers = ctx.limits.maxFreeAnswers ?? DEFAULT_MAX_FREE_ANSWERS;
+  if (freeAnswers.length <= maxFreeAnswers) return rest;
+  ctx.options.ui.note(`${freeAnswers.length} questions answered free, more than the ${maxFreeAnswers} allowed: ${ctx.briefPath} is too vague`);
+  return { ...rest, briefGaps: { maxFreeAnswers, questions: freeAnswers.map(({ id, question, context }) => ({ id, question, ...(context && { context }) })) } };
 }
 
 /**
@@ -112,7 +138,7 @@ export async function runSpecFlow(options: SpecFlowOptions): Promise<SpecFlowRes
  * answers.md is written only once the clarify run is over: right before the next spec-create run, or when the
  * spec step finishes. On `stop`, the choices made so far go into the Answer fields of spec.md instead.
  */
-async function clarify(ctx: Context, recorded: BriefState, previous: Previous): Promise<SpecFlowResult> {
+async function clarify(ctx: Context, recorded: BriefState, previous: Previous): Promise<Outcome> {
   const { ui } = ctx.options;
   const last = readOutput(ctx.root, recorded);
   if (!last) {
@@ -152,7 +178,7 @@ async function clarify(ctx: Context, recorded: BriefState, previous: Previous): 
       finishing = pending.slice(i).map((p) => p.id);
       break;
     }
-    previous.answers.push({ id: q.id, question: q.question, answer: choice });
+    previous.answers.push({ id: q.id, question: q.question, answer: choice, ...(q.context && { context: q.context }) });
   }
   if (stopped.length > 0) {
     const chosen = previous.answers.slice(given);
@@ -202,7 +228,7 @@ async function specCreate(
   previous: Previous | undefined,
   finalRun = false,
   ask = false,
-): Promise<SpecFlowResult> {
+): Promise<Outcome> {
   const { ui, agent = runClaude } = ctx.options;
   const answers = previous && {
     path: previous.answersPath,
@@ -212,8 +238,8 @@ async function specCreate(
     systemPrompt: specAgent.systemPrompt,
     userMessage: specAgent.buildUserMessage(ctx.sources.brief, ctx.sources.others, answers),
     schema: specAgent.schema,
-    timeoutMs: ctx.options.timeoutMs ?? DEFAULT_TIMEOUT_MIN * 60_000,
-    maxBudgetUsd: ctx.options.maxBudgetUsd ?? DEFAULT_BUDGET_USD,
+    timeoutMs: ctx.options.timeoutMs ?? (ctx.limits.specAgent?.timeoutMin ?? DEFAULT_TIMEOUT_MIN) * 60_000,
+    maxBudgetUsd: ctx.options.maxBudgetUsd ?? ctx.limits.specAgent?.budgetUsd ?? DEFAULT_BUDGET_USD,
   };
   if (previous) writeAnswerLog(ctx.root, previous);
 
@@ -301,6 +327,7 @@ function counts(spec: specAgent.SpecOutput, record: QuestionRecord) {
     criteria: spec.criteria.length,
     openQuestions: sections.open.length,
     leftOpen: sections.leftOpen.length,
+    freeAnswers: sections.leftOpen,
     outOfScope: sections.outOfScope.length,
     unanswered: sections.unanswered.length,
   };

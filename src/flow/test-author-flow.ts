@@ -61,10 +61,10 @@ export interface TestAuthorResult {
   lock?: string;
 }
 
-export const DEFAULT_TEST_AUTHOR_TIMEOUT_MIN = 30;
-export const DEFAULT_TEST_AUTHOR_BUDGET_USD = 10;
-export const DEFAULT_TEST_AUTHOR_MAX_TURNS = 100;
-const DEFAULT_TEST_FILE_TIMEOUT_MS = 5 * 60_000;
+export const DEFAULT_TEST_AUTHOR_TIMEOUT_MIN = 15;
+export const DEFAULT_TEST_AUTHOR_BUDGET_USD = 5;
+export const DEFAULT_TEST_AUTHOR_MAX_TURNS = 80;
+export const DEFAULT_TEST_FILE_TIMEOUT_MIN = 2;
 
 /** The test author reads and writes files; it has no shell, so it cannot run anything, not even its tests. */
 const TOOLS = ["Read", "Glob", "Grep", "Write", "Edit"];
@@ -131,9 +131,9 @@ export async function runTestAuthor(options: TestAuthorOptions): Promise<TestAut
     (p) => `${p.acceptanceTests.length + p.infrastructure.length} files visible, ${p.unitTests.length} unit tests hidden`);
 
   const limits: Limits = {
-    timeoutMs: options.timeoutMs ?? DEFAULT_TEST_AUTHOR_TIMEOUT_MIN * 60_000,
-    maxBudgetUsd: options.maxBudgetUsd ?? DEFAULT_TEST_AUTHOR_BUDGET_USD,
-    maxTurns: options.maxTurns ?? DEFAULT_TEST_AUTHOR_MAX_TURNS,
+    timeoutMs: options.timeoutMs ?? (contract.limits.testAuthor?.timeoutMin ?? DEFAULT_TEST_AUTHOR_TIMEOUT_MIN) * 60_000,
+    maxBudgetUsd: options.maxBudgetUsd ?? contract.limits.testAuthor?.budgetUsd ?? DEFAULT_TEST_AUTHOR_BUDGET_USD,
+    maxTurns: options.maxTurns ?? contract.limits.testAuthor?.maxTurns ?? DEFAULT_TEST_AUTHOR_MAX_TURNS,
   };
   const reviewCriteria = spec.criteria.filter((c) => c.provenBy === "review");
   const review = reviewCriteria.length === 0 ? undefined : await writeReviewGuide(options, root, specPath, spec, limits, plan.writable);
@@ -461,7 +461,7 @@ async function ownTestRun(options: TestAuthorOptions, contract: Contract, runDir
   return step(ui, "Running the acceptance tests", async () => {
     const results: TestFileResult[] = [];
     for (const t of tests) {
-      results.push(await runTestFile(contract.root, command, t.file, t.criterion, options.testTimeoutMs ?? DEFAULT_TEST_FILE_TIMEOUT_MS));
+      results.push(await runTestFile(contract.root, command, t.file, t.criterion, options.testTimeoutMs ?? (contract.limits.testFileTimeoutMin ?? DEFAULT_TEST_FILE_TIMEOUT_MIN) * 60_000));
     }
     writeFileSync(path.join(runDir, TEST_RUN_FILE), JSON.stringify({ command, results }, null, 2) + "\n");
     const passing = results.filter(passes);
