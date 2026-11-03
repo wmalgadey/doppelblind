@@ -1,6 +1,7 @@
 ---
 name: spec-answers
 description: Walk through the open questions of a spec.md and write the user's answers into its Answer fields. Use when the user wants to answer the open questions of a spec.
+model: sonnet
 ---
 
 # Answer the open questions of a spec
@@ -36,7 +37,7 @@ The tool adds a free text field itself and allows at most four options, so offer
 
 ## Suggested answers
 
-Before each question, look for what the project already says about it: docs such as `docs/product.md`, `docs/decisions.md` and the brief, the answers of other specs, and the code. Build one or two suggestions from that; where nothing is found, use a reasonable best guess.
+Once, before the first question, read spec.md, its brief, `docs/product.md`, `docs/decisions.md` and the answers.md of the other specs. Do not search the code, and do not read these files again for each question. Build one or two suggestions per question from what you read; where it says nothing, use a reasonable best guess.
 
 Each suggestion:
 
@@ -65,7 +66,7 @@ If the user keeps the text, keep it unchanged.
 
 Write each answer into spec.md as soon as the user has given it, before you ask the next question. Do not collect answers.
 
-Write it on the line after its **Answer:** field, followed by an empty line; if the field holds the marker `unanswered`, replace the marker with the answer. Change nothing else in spec.md: no criterion, no question, no heading. Read spec.md again before each write, so that you never overwrite a change made in between.
+Write it with the Edit tool on the line after its **Answer:** field, followed by an empty line; if the field holds the marker `unanswered`, replace the marker with the answer. Change nothing else in spec.md: no criterion, no question, no heading. Do not read spec.md again before each write; if the Edit fails because the file changed, read it once and retry.
 
 ## Stopping
 
