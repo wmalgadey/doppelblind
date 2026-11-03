@@ -26,6 +26,16 @@ export interface AgentRequest {
   workdir?: string;
   /** Folder the run is archived in: the call in `call.json`, every event in `trace.jsonl`. */
   runDir?: string;
+  /** Called while the agent works, after each event that changes its progress. */
+  onProgress?: (progress: AgentProgress) => void;
+}
+
+/** How far a running agent has come, read from its stream of events. */
+export interface AgentProgress {
+  /** Assistant messages so far. */
+  turns: number;
+  /** The agent's last tool call, e.g. `Write tests/acceptance/001-x/ac-001.test.ts`; paths relative to its working directory. */
+  action?: string;
 }
 
 export const CALL_FILE = "call.json";
@@ -81,9 +91,14 @@ export const runClaude: Agent = async (request) => {
   const archive = () => runDir && writeFileSync(path.join(runDir, CALL_FILE), JSON.stringify(call, null, 2) + "\n");
   archive();
   const trace = runDir ? openSync(path.join(runDir, TRACE_FILE), "a") : undefined;
-  const onStdout = trace === undefined ? undefined : (chunk: string) => writeSync(trace, chunk);
+  const events = new EventStream(workdir, request.onProgress);
+  const onStdout = (chunk: string) => {
+    if (trace !== undefined) writeSync(trace, chunk);
+    events.push(chunk);
+  };
   try {
-    const { stdout, stderr, code } = await run(sandbox?.bin ?? bin, sandbox?.args ?? args, workdir, request.userMessage, request.timeoutMs, onStdout);
+    const { stderr, code } = await run(sandbox?.bin ?? bin, sandbox?.args ?? args, workdir, request.userMessage, request.timeoutMs, onStdout);
+    const stdout = events.end();
     Object.assign(call, { endedAt: new Date().toISOString(), exitCode: code, stderr });
     return parseResponse(stdout, stderr, code);
   } catch (err) {
@@ -137,10 +152,73 @@ function parseLine(line: string): Record<string, unknown> | undefined {
   }
 }
 
-function run(bin: string, args: string[], cwd: string, input: string, timeoutMs: number, onStdout?: (chunk: string) => void) {
-  return new Promise<{ stdout: string; stderr: string; code: number | null }>((resolve, reject) => {
+/** Lines of stdout kept besides the result event, for the message when there is none. */
+const TAIL_LINES = 5;
+/** Characters of stderr kept; only its end is shown. */
+const STDERR_LIMIT = 64 * 1024;
+
+/**
+ * Reads the CLI's stream of JSON lines as it arrives and keeps only what the run's answer needs: the last result
+ * event and the last few lines. The full stream goes to the trace, never into memory.
+ */
+class EventStream {
+  private partial = "";
+  private result: string | undefined;
+  private tail: string[] = [];
+  private messages = new Set<unknown>();
+  private progress: AgentProgress = { turns: 0 };
+
+  private workdir: string;
+  private onProgress: ((progress: AgentProgress) => void) | undefined;
+
+  constructor(workdir: string, onProgress?: (progress: AgentProgress) => void) {
+    this.workdir = workdir;
+    this.onProgress = onProgress;
+  }
+
+  push(chunk: string): void {
+    const lines = (this.partial + chunk).split("\n");
+    this.partial = lines.pop()!;
+    for (const line of lines) this.line(line);
+  }
+
+  /** The kept lines, as parseResponse reads them. */
+  end(): string {
+    if (this.partial) this.line(this.partial);
+    this.partial = "";
+    return [...this.tail, ...(this.result && !this.tail.includes(this.result) ? [this.result] : [])].join("\n");
+  }
+
+  private line(line: string): void {
+    if (!line.trim()) return;
+    this.tail = [...this.tail, line].slice(-TAIL_LINES);
+    const event = parseLine(line);
+    if (event?.type === "result") this.result = line;
+    if (event?.type !== "assistant" || !this.onProgress) return;
+    const message = event.message as { id?: unknown; content?: unknown } | undefined;
+    const before = { ...this.progress };
+    this.messages.add(message?.id ?? this.messages.size);
+    this.progress.turns = this.messages.size;
+    for (const block of Array.isArray(message?.content) ? message.content : []) {
+      if (block?.type === "tool_use") this.progress.action = describeToolUse(block, this.workdir);
+    }
+    if (before.turns !== this.progress.turns || before.action !== this.progress.action) this.onProgress({ ...this.progress });
+  }
+}
+
+/** A tool call as one short line: its name and the path or pattern it works on. */
+function describeToolUse(block: { name?: unknown; input?: unknown }, workdir: string): string {
+  const name = typeof block.name === "string" ? block.name : "tool";
+  const input = (block.input ?? {}) as Record<string, unknown>;
+  const target = [input.file_path, input.path, input.pattern].find((v): v is string => typeof v === "string");
+  if (!target) return name;
+  const relative = path.isAbsolute(target) ? path.relative(workdir, target) || "." : target;
+  return `${name} ${relative.startsWith("..") ? target : relative}`;
+}
+
+function run(bin: string, args: string[], cwd: string, input: string, timeoutMs: number, onStdout: (chunk: string) => void) {
+  return new Promise<{ stderr: string; code: number | null }>((resolve, reject) => {
     const child = spawn(bin, args, { cwd, stdio: ["pipe", "pipe", "pipe"] });
-    let stdout = "";
     let stderr = "";
     let timedOut = false;
     let settled = false;
@@ -169,10 +247,9 @@ function run(bin: string, args: string[], cwd: string, input: string, timeoutMs:
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
       if (settled) return; // the trace is closed once the run was given up
-      stdout += chunk;
-      onStdout?.(chunk);
+      onStdout(chunk);
     });
-    child.stderr.on("data", (chunk) => (stderr += chunk));
+    child.stderr.on("data", (chunk) => (stderr = (stderr + chunk).slice(-STDERR_LIMIT)));
     child.on("error", (err: NodeJS.ErrnoException) => {
       rejectOnce(timedOut ? timeoutError : err.code === "ENOENT"
           ? new DoppelblindError(`Agent CLI not found: ${bin}`, ["Install Claude Code or set DOPPELBLIND_CLAUDE_BIN."])
@@ -183,7 +260,7 @@ function run(bin: string, args: string[], cwd: string, input: string, timeoutMs:
       else if (!settled) {
         settled = true;
         clearTimers();
-        resolve({ stdout, stderr, code });
+        resolve({ stderr, code });
       }
     });
     child.stdin.on("error", () => {}); // the child may exit before reading its input

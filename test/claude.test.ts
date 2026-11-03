@@ -54,6 +54,28 @@ describe("claude", () => {
     assert.equal(readFileSync(path.join(runDir, "trace.jsonl"), "utf8"), stdout);
   });
 
+  test("the result is found after many later lines, and the agent's progress is reported while it works", async () => {
+    const tool = (id: string, name: string, input: object) => ({ type: "assistant", message: { id, content: [{ type: "tool_use", name, input }] } });
+    const events = [
+      { type: "system", subtype: "init" },
+      { type: "assistant", message: { id: "m1", content: [{ type: "text", text: "Looking around." }] } },
+      tool("m1", "Glob", { pattern: "**/*.test.ts" }),
+      tool("m2", "Read", { file_path: "/etc/hosts" }),
+      tool("m3", "Write", { file_path: "tests/acceptance/001-x/ac-001.test.ts", content: "x" }),
+    ];
+    const later = Array.from({ length: 10 }, (_, i) => JSON.stringify({ type: "system", subtype: `later-${i}` }));
+    useFake([...events.map((e) => JSON.stringify(e)), SUCCESS, ...later, ""].join("\n"));
+    const progress: unknown[] = [];
+    const response = await runClaude({ ...request, onProgress: (p) => progress.push(p) });
+    assert.deepEqual(response.output, { ok: true });
+    assert.deepEqual(progress, [
+      { turns: 1 },
+      { turns: 1, action: "Glob **/*.test.ts" },
+      { turns: 2, action: "Read /etc/hosts" },
+      { turns: 3, action: "Write tests/acceptance/001-x/ac-001.test.ts" },
+    ]);
+  });
+
   test("the call is archived with its arguments, input and exit", async () => {
     const record = useFake(SUCCESS);
     const runDir = mkdtempSync(path.join(tmpdir(), "run-"));
