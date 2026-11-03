@@ -3,6 +3,7 @@ import { closeSync, mkdtempSync, openSync, rmSync, writeFileSync, writeSync } fr
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { AgentLimitError, DoppelblindError } from "../errors.ts";
+import { sandboxCall } from "./sandbox.ts";
 
 export interface AgentRequest {
   systemPrompt: string;
@@ -11,6 +12,18 @@ export interface AgentRequest {
   schema: object;
   timeoutMs: number;
   maxBudgetUsd: number;
+  /** Most turns the agent may take; unbounded when omitted. */
+  maxTurns?: number;
+  /**
+   * Built-in tools the agent may use, e.g. `Read` or `Write`; none when omitted. Edits are accepted only inside
+   * `workdir`, reads outside it are denied: a second line behind the sandbox.
+   */
+  tools?: string[];
+  /**
+   * The directory the agent works in. When given, the agent runs sandboxed: this directory is all it sees
+   * of the project, and it is kept after the run. Otherwise it runs in an empty temporary directory.
+   */
+  workdir?: string;
   /** Folder the run is archived in: the call in `call.json`, every event in `trace.jsonl`. */
   runDir?: string;
 }
@@ -28,8 +41,9 @@ export interface AgentResponse {
 export type Agent = (request: AgentRequest) => Promise<AgentResponse>;
 
 /**
- * Runs Claude Code headless with no tools, no settings, no project files and the role's
- * own system prompt, in an empty working directory. The agent sees only `userMessage`.
+ * Runs Claude Code headless with no settings, no project files and the role's own system prompt.
+ * Without `workdir` it has no tools and runs in an empty working directory, so it sees only `userMessage`;
+ * with `workdir` it runs in a sandbox that holds only that directory, with the tools the request names.
  * The CLI streams its events, so the trace grows while the agent works and survives a failed run.
  * The call — binary, arguments, working directory, stdin, limits — is archived before it starts and
  * completed with its exit when it ends.
@@ -37,23 +51,28 @@ export type Agent = (request: AgentRequest) => Promise<AgentResponse>;
 export const runClaude: Agent = async (request) => {
   // path of the Claude Code CLI; harness settings do not come from the project
   const bin = process.env.DOPPELBLIND_CLAUDE_BIN || "claude";
-  const workdir = mkdtempSync(path.join(tmpdir(), "doppelblind-agent-"));
+  const workdir = request.workdir ?? mkdtempSync(path.join(tmpdir(), "doppelblind-agent-"));
+  const tools = request.tools ?? [];
   const args = [
     "--print",
     "--output-format", "stream-json",
     "--verbose",
     "--json-schema", JSON.stringify(request.schema),
     "--system-prompt", request.systemPrompt,
-    "--tools", "",
+    "--tools", tools.join(","),
+    ...(tools.length > 0 ? ["--permission-mode", "acceptEdits"] : []),
     "--setting-sources", "",
     "--strict-mcp-config",
     "--no-session-persistence",
     "--max-budget-usd", String(request.maxBudgetUsd),
+    ...(request.maxTurns === undefined ? [] : ["--max-turns", String(request.maxTurns)]),
   ];
+  const sandbox = request.workdir === undefined ? undefined : sandboxCall(bin, args, workdir);
   const { runDir } = request;
   const call: Record<string, unknown> = {
     bin,
     args,
+    ...(sandbox && { sandbox: { bin: sandbox.bin, args: sandbox.args.slice(0, sandbox.args.indexOf("--")) } }),
     cwd: workdir,
     stdin: request.userMessage,
     timeoutMs: request.timeoutMs,
@@ -64,7 +83,7 @@ export const runClaude: Agent = async (request) => {
   const trace = runDir ? openSync(path.join(runDir, TRACE_FILE), "a") : undefined;
   const onStdout = trace === undefined ? undefined : (chunk: string) => writeSync(trace, chunk);
   try {
-    const { stdout, stderr, code } = await run(bin, args, workdir, request.userMessage, request.timeoutMs, onStdout);
+    const { stdout, stderr, code } = await run(sandbox?.bin ?? bin, sandbox?.args ?? args, workdir, request.userMessage, request.timeoutMs, onStdout);
     Object.assign(call, { endedAt: new Date().toISOString(), exitCode: code, stderr });
     return parseResponse(stdout, stderr, code);
   } catch (err) {
@@ -74,7 +93,8 @@ export const runClaude: Agent = async (request) => {
   } finally {
     if (trace !== undefined) closeSync(trace);
     archive();
-    rmSync(workdir, { recursive: true, force: true });
+    sandbox?.cleanup();
+    if (request.workdir === undefined) rmSync(workdir, { recursive: true, force: true });
   }
 };
 
@@ -89,6 +109,9 @@ export function parseResponse(stdout: string, stderr: string, code: number | nul
     const reason = typeof result.result === "string" ? result.result : String(result.subtype);
     if (result.subtype === "error_max_budget_usd") {
       throw new AgentLimitError("budget", "Agent run failed.", [reason]);
+    }
+    if (result.subtype === "error_max_turns") {
+      throw new AgentLimitError("turns", "Agent reached its turn limit.", [reason]);
     }
     throw new DoppelblindError("Agent run failed.", [reason]);
   }
