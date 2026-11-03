@@ -57,9 +57,9 @@ async function main(argv: string[]): Promise<number> {
   const next =
     `  Next: answer the open questions in ${specFile}; leave empty what you do not want to answer.\n` +
     `  Then run \`doppelblind feature ${brief}\` again. For each question still without an answer it asks:\n` +
-    `  free, out of scope, stop (answer it later) or finish (end the spec step). Then it asks whether the\n` +
-    `  spec agent writes the spec again with all answers. Once you want to give no more answers, choose\n` +
-    `  finish or decline another run: the spec step is then final.\n`;
+    `  free, out of scope, stop (answer it later) or finish (end the spec step). Then the spec agent writes\n` +
+    `  the spec again with all answers, and you choose to answer its new questions or to mark them all\n` +
+    `  unanswered. Once you want to give no more answers, choose finish or unanswered: the spec step is then final.\n`;
   process.stderr.write(
     `\n  ${result.criteria} criteria, ${result.openQuestions} open questions.\n` +
       `  Status: ${result.status}\n` +

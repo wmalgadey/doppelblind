@@ -59,9 +59,10 @@ const OUTPUT_FILE = "output.json";
 export const DEFAULT_TIMEOUT_MIN = 15;
 export const DEFAULT_BUDGET_USD = 5;
 
-const ANOTHER_SPEC_CREATE_RUN = "Start another spec-create run?";
 const STOP = "stop";
 const FINISH = "finish";
+const ANSWER = "answer";
+const UNANSWERED = "unanswered";
 
 interface Context {
   root: string;
@@ -103,8 +104,8 @@ export async function runSpecFlow(options: SpecFlowOptions): Promise<SpecFlowRes
 
 /**
  * The clarify run of a brief that has a spec: reads its answers, asks for a choice on every open question
- * without one, then either starts another spec-create run, or finishes the spec step.
- * Choosing `finish` on a question, once confirmed, finishes the spec step at once.
+ * without one, then starts another spec-create run, after which the user chooses to answer its questions or
+ * to record them all as unanswered. Choosing `finish` on a question, once confirmed, finishes the spec step at once.
  * answers.md is written only once the clarify run is over: right before the next spec-create run, or when the
  * spec step finishes. On `stop`, the choices made so far go into the Answer fields of spec.md instead.
  */
@@ -165,9 +166,9 @@ async function clarify(ctx: Context, recorded: BriefState, previous: Previous): 
     };
   }
 
-  if (!finishing && (await ui.choose(ANOTHER_SPEC_CREATE_RUN, ["yes", "no"])) === "yes") {
+  if (!finishing) {
     ui.note(`spec-create run: starting with ${previous.answers.length} answers`);
-    return specCreate(ctx, recorded, previous);
+    return specCreate(ctx, recorded, previous, false, true);
   }
   // each spec-create run receives every answer given before it, so only answers to the current spec are new
   const own = new Set(last.open_questions.map((q) => q.id));
@@ -189,8 +190,16 @@ async function clarify(ctx: Context, recorded: BriefState, previous: Previous): 
 /**
  * The next spec-create run of a brief: runs the spec agent and writes its spec.md.
  * In a final run, every open question of the run is recorded as unanswered and the spec step ends.
+ * With `ask`, the user chooses afterwards to answer the new spec's questions, which ends the command,
+ * or to record them all as unanswered, which ends the spec step.
  */
-async function specCreate(ctx: Context, recorded: BriefState | undefined, previous: Previous | undefined, final = false): Promise<SpecFlowResult> {
+async function specCreate(
+  ctx: Context,
+  recorded: BriefState | undefined,
+  previous: Previous | undefined,
+  finalRun = false,
+  ask = false,
+): Promise<SpecFlowResult> {
   const { ui, agent = runClaude } = ctx.options;
   const answers = previous && { path: previous.answersPath, content: previous.answers.length > 0 ? renderAnswerList(previous.answers) : "" };
   const request = {
@@ -212,7 +221,7 @@ async function specCreate(ctx: Context, recorded: BriefState | undefined, previo
     return { response, runDir, log };
   });
 
-  const { spec, record, specFile } = await withLog(log, async () => {
+  const written = await withLog(log, async () => {
     const output = await step(ui, "Validating output against schema",
       () => validateOutput<specAgent.SpecOutput>(specAgent.schema, response.output));
 
@@ -226,13 +235,27 @@ async function specCreate(ctx: Context, recorded: BriefState | undefined, previo
     const spec = renumberQuestions(output, Math.max(recorded?.lastQuestion ?? 0, highestQuestion(used)));
     writeFileSync(path.join(runDir, OUTPUT_FILE), JSON.stringify(spec, null, 2) + "\n");
 
-    const unanswered = final ? spec.open_questions.map((q) => q.id) : [];
+    const unanswered = finalRun ? spec.open_questions.map((q) => q.id) : [];
     const record = { answers: previous?.answers ?? [], unanswered };
 
     const { file } = await step(ui, `Writing ${SPEC_FILE}`, () => writeSpec(ctx, recorded?.folder, spec, record, previous),
       (written) => describeWrite(ctx.root, written, previous));
     return { spec, record, specFile: file };
   });
+  const { spec, specFile } = written;
+  let { record } = written;
+
+  let final = finalRun;
+  if (ask) {
+    const question = `A new ${SPEC_FILE} was created from the answers. The new spec contains ${spec.open_questions.length} open questions. ` +
+      `Do you want to (1) ${ANSWER} the questions, or should all questions be (2) marked \`${UNANSWERED}\`?`;
+    if ((await ui.choose(question, [ANSWER, UNANSWERED])) === UNANSWERED) {
+      record = { ...record, unanswered: spec.open_questions.map((q) => q.id) };
+      const folder = toProjectPath(ctx.root, path.dirname(specFile));
+      await step(ui, `Writing ${SPEC_FILE}`, () => writeSpec(ctx, folder, spec, record), ({ file }) => toProjectPath(ctx.root, file));
+      final = true;
+    }
+  }
 
   const status = final ? "final" : specStatus(spec);
   if (status === "ready") ui.note("no open question concerns a criterion");

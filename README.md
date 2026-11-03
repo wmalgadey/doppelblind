@@ -26,7 +26,7 @@ The spec agent runs in these steps:
 
 1. Spec-create run: the spec agent writes the spec and open questions afresh from the brief, the sources and every answer so far.
 2. Clarify run: you answer the questions manually in `spec.md`, or start the flow again and mark unanswered question with `free` or `out of scope`. If you `finish` the clarify run while any question is unanswered, those questions will be marked `unanswered` and the spec-agent is finished.
-3. If all questions are answered, you decide whether another spec-create run starts with step 1. or to stop the spec-agent.
+3. If all questions are answered, another spec-create run starts at once and writes a new `spec.md` with new open questions. You then choose to answer them (the command ends; answer them and run the flow again, back at step 2) or to mark them all `unanswered`, which finishes the spec-agent.
 
 Answering does not make the open questions fewer: every spec-create run starts from scratch, and an answer can bring up decisions nobody saw before. The loop does not end by itself, so you decide when the spec is clear enough.
 
