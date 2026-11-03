@@ -12,7 +12,7 @@ import { SPEC_FILE } from "../spec/folder.ts";
 import { parseSpec, type ParsedSpec } from "../spec/parse.ts";
 import { readState, STATE_DIR } from "../spec/state.ts";
 import type { Ui } from "../tui.ts";
-import { describeCost, runAgentWithLimitChoice, startRunLog, step, withLog, type Limits } from "./run.ts";
+import { describeCost, runAgentWithLimitChoice, showProgress, startRunLog, step, withLog, type Limits } from "./run.ts";
 
 export interface TestAuthorOptions {
   cwd: string;
@@ -129,8 +129,10 @@ export async function runTestAuthor(options: TestAuthorOptions): Promise<TestAut
       const runDir = startRunLog(root, "test-author", run, guardrails);
       const log = toProjectPath(root, path.join(runDir, TRACE_FILE));
       ui.note(`trace: ${log}`);
+      // the agent writes its files here while it works; they reach the project only after the check
+      ui.note(`workspace: ${ws.dir}/${plan.writable}`);
       const response = await withLog(log, () =>
-        step(ui, "Test author is writing the acceptance tests", () => (options.agent ?? runClaude)({ ...run, runDir }), describeCost));
+        step(ui, "Test author is writing the acceptance tests", (s) => (options.agent ?? runClaude)({ ...run, runDir, onProgress: showProgress(s) }), describeCost));
       return { response, runDir, log };
     });
 
@@ -242,7 +244,7 @@ async function writeReviewGuide(
     const runDir = startRunLog(root, "review-guide", { ...request, ...attempt });
     const log = toProjectPath(root, path.join(runDir, TRACE_FILE));
     const response: AgentResponse = await withLog(log, () =>
-      step(ui, "Test author is writing the review file", () => (options.agent ?? runClaude)({ ...request, ...attempt, runDir }), describeCost));
+      step(ui, "Test author is writing the review file", (s) => (options.agent ?? runClaude)({ ...request, ...attempt, runDir, onProgress: showProgress(s) }), describeCost));
     return { response, log };
   });
   return withLog(log, () => step(ui, "Validating the review file", () => {

@@ -3,6 +3,8 @@ import { styleText } from "node:util";
 import { DoppelblindError } from "./errors.ts";
 
 export interface Step {
+  /** Shows what the running step is doing now, next to its time; a later call replaces it. */
+  update(detail: string): void;
   done(detail?: string): void;
   /** Marks the step failed; the reason follows on the next line. */
   fail(reason?: string): void;
@@ -32,8 +34,8 @@ const LABEL_WIDTH = 40;
 const TICK_MS = 10_000;
 
 /**
- * Minimal terminal UI: a logo, then one line per step; the running step shows how long it has been running,
- * on a TTY next to a spinner.
+ * Minimal terminal UI: a logo, then one line per step; the running step shows how long it has been running and
+ * what it is doing now, on a TTY next to a spinner.
  * Choices are read from `input`, one line each: an option or its number.
  */
 export function terminalUi(stream: NodeJS.WriteStream = process.stderr, input: NodeJS.ReadableStream = process.stdin): Ui {
@@ -52,18 +54,26 @@ export function terminalUi(stream: NodeJS.WriteStream = process.stderr, input: N
       const started = Date.now();
       const line = (icon: string, detail = "") => `  ${icon} ${label.padEnd(LABEL_WIDTH)} ${detail}`.trimEnd();
       let timer: NodeJS.Timeout | undefined;
+      let now = "";
+      // the running line must fit the terminal, or redrawing it leaves wrapped rests behind
+      const running = () => {
+        const text = now ? `${elapsed(started)} · ${now}` : elapsed(started);
+        // icon and spaces take 4 columns before the label and 1 after it; the last column stays free
+        const room = (stream.columns || 80) - Math.max(label.length, LABEL_WIDTH) - 6;
+        return text.length > room ? `${text.slice(0, Math.max(room - 1, 0))}…` : text;
+      };
 
       if (tty) {
         let frame = 0;
         const draw = () => {
           const spinner = style("cyan", FRAMES[frame++ % FRAMES.length]);
-          stream.write(`\r\x1b[2K${line(spinner, style("dim", elapsed(started)))}`);
+          stream.write(`\r\x1b[2K${line(spinner, style("dim", running()))}`);
         };
         draw();
         timer = setInterval(draw, 100);
       } else {
         stream.write(`${line("…")}\n`);
-        timer = setInterval(() => stream.write(`${line("…", elapsed(started))}\n`), TICK_MS);
+        timer = setInterval(() => stream.write(`${line("…", running())}\n`), TICK_MS);
       }
 
       const finish = (icon: string, detail?: string) => {
@@ -71,6 +81,7 @@ export function terminalUi(stream: NodeJS.WriteStream = process.stderr, input: N
         stream.write(`${tty ? "\r\x1b[2K" : ""}${line(icon, detail ? style("dim", detail) : "")}\n`);
       };
       return {
+        update: (detail) => (now = detail),
         done: (detail) => finish(style("green", "✔"), detail),
         fail: (reason) => {
           finish(style("red", "✘"), "failed");

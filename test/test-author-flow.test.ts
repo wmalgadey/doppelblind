@@ -197,6 +197,22 @@ describe("test-author-flow", () => {
     assert.ok(ui.events.includes("done: Running the acceptance tests (2 of 2 fail before any implementation)"));
   });
 
+  test("the TUI names the folder the agent writes into and shows its progress on the running step", async () => {
+    const root = project();
+    const ui = recordingUi(["lock"]);
+    const calls: AgentRequest[] = [];
+    const inner = fakeAgents(undefined, calls);
+    const agent: Agent = (request) => {
+      request.onProgress?.({ turns: 2, action: `Write ${WRITABLE}/ac-001.test.mjs` });
+      return inner(request);
+    };
+    await runTestAuthor({ cwd: root, target: BRIEF_PATH, ui, agent });
+
+    assert.ok(ui.events.includes(`note: workspace: ${testAuthorCall(calls).workdir}/${WRITABLE}`), ui.events.join("\n"));
+    assert.ok(ui.events.includes(`update: Test author is writing the acceptance tests (turn 2 · Write ${WRITABLE}/ac-001.test.mjs)`));
+    assert.ok(ui.events.includes(`update: Test author is writing the review file (turn 2 · Write ${WRITABLE}/ac-001.test.mjs)`));
+  });
+
   test("a test that passes before any implementation is reported with its criterion ID", async () => {
     const root = project();
     const ui = recordingUi(["keep unlocked"]);

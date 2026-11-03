@@ -23,7 +23,7 @@ Instead of the brief, every command also takes its spec: `specs/NNN-…/spec.md`
 
 `feature` runs the spec agent until the spec is final; run it again after that and it continues with the test author. The spec agent writes `specs/NNN-<short-name>/spec.md` with criteria in Given-When-Then, each proven by an acceptance test or by review, wishes and open questions; answer the open questions in that file.
 
-Each run keeps a folder in `.doppelblind/runs/<timestamp>-spec-agent/` with the agent's `system-prompt.md`, the user message in `input.md`, its limits and tools in `guardrails.json`, the validated output in `output.json`, the CLI call in `call.json` (binary, arguments, working directory, stdin, time limit, start, end and exit) and `trace.jsonl`, every event of the run as one JSON object per line. The trace is written while the agent works, so `tail -f` follows a run, and it is kept when a run fails.
+Each run keeps a folder in `.doppelblind/runs/<timestamp>-spec-agent/` with the agent's `system-prompt.md`, the user message in `input.md`, its limits and tools in `guardrails.json`, the validated output in `output.json`, the CLI call in `call.json` (binary, arguments, working directory, stdin, time limit, start, end and exit) and `trace.jsonl`, every event of the run as one JSON object per line. The trace is written while the agent works, so `tail -f` follows a run, and it is kept when a run fails. While an agent runs, its step line shows its turn and its last tool call, e.g. `turn 3 · Write tests/acceptance/001-…/ac-001.test.ts`.
 
 The spec agent runs in these steps:
 
@@ -62,7 +62,7 @@ The contract declares what it must not see and where it writes; without these th
 - The orchestrator then runs each test file itself with `testCommand` (default: `npm test -- {file}` if `package.json` has a test script) and reports every file that passes before any implementation, with its criterion ID.
 - Finally you choose `lock` or `keep unlocked`. The lock in `.doppelblind/locks/<spec folder>.json` holds the hash of every file; a later run on a locked spec stops.
 
-Limits: `--timeout` (default 30 minutes), `--budget` (default $10) and `--max-turns` (default 100). At the time or cost limit you are asked whether to double it and start over; the turn limit is never raised. Each run keeps its folder in `.doppelblind/runs/<timestamp>-test-author/` (and `-review-guide/`) like a spec agent run, with `guardrails.json` and `test-run.json`.
+Limits: `--timeout` (default 30 minutes), `--budget` (default $10) and `--max-turns` (default 100). At the time or cost limit you are asked whether to double it and start over; the turn limit is never raised. Each run keeps its folder in `.doppelblind/runs/<timestamp>-test-author/` (and `-review-guide/`) like a spec agent run, with `guardrails.json` and `test-run.json`. The test author writes into a temporary workspace that the TUI names as `workspace: …`; you can watch its files appear there, and they reach the project only after the write check.
 
 If the Claude CLI is not on the PATH, set `DOPPELBLIND_CLAUDE_BIN`. In a GitHub Codespace, the CLI ships with the VS Code extension:
 

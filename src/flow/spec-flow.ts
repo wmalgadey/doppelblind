@@ -22,7 +22,7 @@ import { highestQuestion, questionNumber, renumberQuestions } from "../spec/ques
 import { questionSections, renderSpec, type QuestionRecord } from "../spec/render.ts";
 import { readState, specStatus, STATE_FILE, writeState, type BriefState, type SpecStatus } from "../spec/state.ts";
 import type { Ui } from "../tui.ts";
-import { describeCost, runAgentWithLimitChoice, startRunLog, step, withLog } from "./run.ts";
+import { describeCost, runAgentWithLimitChoice, showProgress, startRunLog, step, withLog } from "./run.ts";
 
 export interface SpecFlowOptions {
   cwd: string;
@@ -218,7 +218,7 @@ async function specCreate(
     const log = toProjectPath(ctx.root, path.join(runDir, TRACE_FILE));
     ui.note(`trace: ${log}`);
     const response = await withLog(log, () =>
-      step(ui, "Spec agent is writing the spec", () => agent({ ...request, ...limits, runDir }), describeCost));
+      step(ui, "Spec agent is writing the spec", (s) => agent({ ...request, ...limits, runDir, onProgress: showProgress(s) }), describeCost));
     return { response, runDir, log };
   });
 

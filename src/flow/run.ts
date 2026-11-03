@@ -1,20 +1,20 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { TRACE_FILE, type AgentRequest } from "../agent/claude.ts";
+import { TRACE_FILE, type AgentProgress, type AgentRequest } from "../agent/claude.ts";
 import { AgentLimitError, DoppelblindError } from "../errors.ts";
 import { STATE_DIR } from "../spec/state.ts";
-import type { Ui } from "../tui.ts";
+import type { Step, Ui } from "../tui.ts";
 
 /** The limits and boundaries a run was started with, kept in its run folder. */
 export const GUARDRAILS_FILE = "guardrails.json";
 
 export type Limits = Pick<AgentRequest, "timeoutMs" | "maxBudgetUsd" | "maxTurns">;
 
-/** Runs `fn` as one step of the TUI: done with `detail` of its result, or failed with the reason. */
-export async function step<T>(ui: Ui, label: string, fn: () => T | Promise<T>, detail?: (result: T) => string): Promise<T> {
+/** Runs `fn` as one step of the TUI: done with `detail` of its result, or failed with the reason. `fn` may update the step. */
+export async function step<T>(ui: Ui, label: string, fn: (s: Step) => T | Promise<T>, detail?: (result: T) => string): Promise<T> {
   const s = ui.step(label);
   try {
-    const result = await fn();
+    const result = await fn(s);
     s.done(detail?.(result));
     return result;
   } catch (err) {
@@ -81,6 +81,11 @@ export async function withLog<T>(log: string, fn: () => T | Promise<T>): Promise
     if (err instanceof DoppelblindError) err.details.push(`Agent trace: ${log}`);
     throw err;
   }
+}
+
+/** Reports an agent's progress on its running step, e.g. `turn 3 · Write tests/acceptance/001-x/ac-001.test.ts`. */
+export function showProgress(s: Step): (progress: AgentProgress) => void {
+  return (p) => s.update([`turn ${p.turns}`, ...(p.action ? [p.action] : [])].join(" · "));
 }
 
 export function describeCost(response: { costUsd?: number; durationMs?: number }): string {
