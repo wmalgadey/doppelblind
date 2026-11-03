@@ -252,6 +252,7 @@ describe("spec-flow", () => {
     });
 
     assert.equal(calls.length, 2);
+    assert.notEqual(calls[0].runDir, calls[1].runDir);
     assert.equal(calls[0][limit === "time" ? "timeoutMs" : "maxBudgetUsd"], initial);
     assert.equal(calls[1][limit === "time" ? "timeoutMs" : "maxBudgetUsd"], increased);
     assert.ok(ui.events.includes(

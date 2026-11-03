@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { runClaude, TRACE_FILE, type Agent, type AgentRequest, type AgentResponse } from "../agent/claude.ts";
+import { runClaude, TRACE_FILE, type Agent, type AgentRequest } from "../agent/claude.ts";
 import { loadContract, toProjectPath } from "../contract.ts";
 import { AgentLimitError, DoppelblindError } from "../errors.ts";
 import { validateOutput } from "../gates/schema.ts";
@@ -201,13 +201,18 @@ async function specCreate(ctx: Context, recorded: BriefState | undefined, previo
     maxBudgetUsd: ctx.options.maxBudgetUsd ?? DEFAULT_BUDGET_USD,
   };
   if (previous) writeAnswerLog(ctx.root, previous);
-  const runDir = startRunLog(ctx.root, request.systemPrompt, request.userMessage);
-  const log = toProjectPath(ctx.root, path.join(runDir, TRACE_FILE));
-  ui.note(`trace: ${log}`);
+
+  // each attempt is a run of its own, with its own call and trace
+  const { response, runDir, log } = await runAgentWithLimitChoice(ui, request, async (limits) => {
+    const runDir = startRunLog(ctx.root, request.systemPrompt, request.userMessage);
+    const log = toProjectPath(ctx.root, path.join(runDir, TRACE_FILE));
+    ui.note(`trace: ${log}`);
+    const response = await withLog(log, () =>
+      step(ui, "Spec agent is writing the spec", () => agent({ ...request, ...limits, runDir }), describeCost));
+    return { response, runDir, log };
+  });
 
   const { spec, record, specFile } = await withLog(log, async () => {
-    const response = await runAgentWithLimitChoice(ui, agent, { ...request, runDir });
-
     const output = await step(ui, "Validating output against schema",
       () => validateOutput<specAgent.SpecOutput>(specAgent.schema, response.output));
 
@@ -240,13 +245,14 @@ async function specCreate(ctx: Context, recorded: BriefState | undefined, previo
   return { ...counts(spec, record), specFile, status, stopped: [] };
 }
 
-async function runAgentWithLimitChoice(ui: Ui, agent: Agent, request: AgentRequest): Promise<AgentResponse> {
-  let timeoutMs = request.timeoutMs;
-  let maxBudgetUsd = request.maxBudgetUsd;
+type Limits = Pick<AgentRequest, "timeoutMs" | "maxBudgetUsd">;
+
+/** Runs `attempt`; when it reaches a limit, asks the user whether to double that limit and run it again. */
+async function runAgentWithLimitChoice<T>(ui: Ui, initial: Limits, attempt: (limits: Limits) => Promise<T>): Promise<T> {
+  let { timeoutMs, maxBudgetUsd } = initial;
   while (true) {
     try {
-      return await step(ui, "Spec agent is writing the spec",
-        () => agent({ ...request, timeoutMs, maxBudgetUsd }), describeCost);
+      return await attempt({ timeoutMs, maxBudgetUsd });
     } catch (err) {
       if (!(err instanceof AgentLimitError)) throw err;
       const current = err.limit === "time" ? timeoutMs : maxBudgetUsd;
@@ -368,7 +374,9 @@ function describeCost(response: { costUsd?: number; durationMs?: number }): stri
  * which the agent completes with its call and trace, so any run can be inspected.
  */
 function startRunLog(root: string, systemPrompt: string, userMessage: string): string {
-  const dir = path.join(root, STATE_DIR, "runs", `${new Date().toISOString().replace(/[:.]/g, "-")}-spec-agent`);
+  const base = path.join(root, STATE_DIR, "runs", `${new Date().toISOString().replace(/[:.]/g, "-")}-spec-agent`);
+  let dir = base;
+  for (let n = 2; existsSync(dir); n++) dir = `${base}-${n}`;
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, "system-prompt.md"), systemPrompt);
   writeFileSync(path.join(dir, "input.md"), userMessage);
