@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { closeSync, mkdtempSync, openSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { DoppelblindError } from "../errors.ts";
+import { AgentLimitError, DoppelblindError } from "../errors.ts";
 
 export interface AgentRequest {
   systemPrompt: string;
@@ -87,6 +87,9 @@ export function parseResponse(stdout: string, stderr: string, code: number | nul
   }
   if (result.is_error || result.subtype !== "success") {
     const reason = typeof result.result === "string" ? result.result : String(result.subtype);
+    if (result.subtype === "error_max_budget_usd") {
+      throw new AgentLimitError("budget", "Agent run failed.", [reason]);
+    }
     throw new DoppelblindError("Agent run failed.", [reason]);
   }
   if (result.structured_output === undefined) {
@@ -117,7 +120,7 @@ function run(bin: string, args: string[], cwd: string, input: string, timeoutMs:
     let settled = false;
     let timer: ReturnType<typeof setTimeout>;
     let forceKillTimer: ReturnType<typeof setTimeout> | undefined;
-    const timeoutError = new DoppelblindError(`Agent did not finish within ${Math.round(timeoutMs / 1000)}s.`);
+    const timeoutError = new AgentLimitError("time", `Agent did not finish within ${Math.round(timeoutMs / 1000)}s.`);
     const clearTimers = () => {
       clearTimeout(timer);
       if (forceKillTimer) clearTimeout(forceKillTimer);

@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { runClaude, TRACE_FILE, type Agent } from "../agent/claude.ts";
+import { runClaude, TRACE_FILE, type Agent, type AgentRequest, type AgentResponse } from "../agent/claude.ts";
 import { loadContract, toProjectPath } from "../contract.ts";
-import { DoppelblindError } from "../errors.ts";
+import { AgentLimitError, DoppelblindError } from "../errors.ts";
 import { validateOutput } from "../gates/schema.ts";
 import { checkSpec } from "../gates/spec.ts";
 import * as specAgent from "../roles/spec-agent/index.ts";
@@ -206,7 +206,7 @@ async function specCreate(ctx: Context, recorded: BriefState | undefined, previo
   ui.note(`trace: ${log}`);
 
   const { spec, record, specFile } = await withLog(log, async () => {
-    const response = await step(ui, "Spec agent is writing the spec", () => agent({ ...request, runDir }), describeCost);
+    const response = await runAgentWithLimitChoice(ui, agent, { ...request, runDir });
 
     const output = await step(ui, "Validating output against schema",
       () => validateOutput<specAgent.SpecOutput>(specAgent.schema, response.output));
@@ -238,6 +238,35 @@ async function specCreate(ctx: Context, recorded: BriefState | undefined, previo
   });
 
   return { ...counts(spec, record), specFile, status, stopped: [] };
+}
+
+async function runAgentWithLimitChoice(ui: Ui, agent: Agent, request: AgentRequest): Promise<AgentResponse> {
+  let timeoutMs = request.timeoutMs;
+  let maxBudgetUsd = request.maxBudgetUsd;
+  while (true) {
+    try {
+      return await step(ui, "Spec agent is writing the spec",
+        () => agent({ ...request, timeoutMs, maxBudgetUsd }), describeCost);
+    } catch (err) {
+      if (!(err instanceof AgentLimitError)) throw err;
+      const current = err.limit === "time" ? timeoutMs : maxBudgetUsd;
+      const increased = current * 2;
+      const answer = await ui.choose(
+        `Agent reached the ${err.limit === "time" ? "time" : "cost"} limit (${formatLimit(err.limit, current)}). ` +
+          `Increase it to ${formatLimit(err.limit, increased)} and retry?`,
+        ["yes", "no"],
+      );
+      if (answer !== "yes") throw err;
+      if (err.limit === "time") timeoutMs = increased;
+      else maxBudgetUsd = increased;
+    }
+  }
+}
+
+function formatLimit(limit: "time" | "budget", value: number): string {
+  if (limit === "budget") return `$${value.toFixed(2)}`;
+  const minutes = value / 60_000;
+  return `${minutes} minute${minutes === 1 ? "" : "s"}`;
 }
 
 /** Writes spec.md; refuses if spec.md changed since it was read. */

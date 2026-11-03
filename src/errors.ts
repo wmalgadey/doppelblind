@@ -8,3 +8,13 @@ export class DoppelblindError extends Error {
     this.details = details;
   }
 }
+
+export class AgentLimitError extends DoppelblindError {
+  readonly limit: "time" | "budget";
+
+  constructor(limit: "time" | "budget", message: string, details: string[] = []) {
+    super(message, details);
+    this.name = "AgentLimitError";
+    this.limit = limit;
+  }
+}

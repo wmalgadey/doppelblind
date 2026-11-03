@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, test } from "vitest";
 import type { Agent, AgentRequest } from "../src/agent/claude.ts";
-import { DoppelblindError } from "../src/errors.ts";
+import { AgentLimitError, DoppelblindError } from "../src/errors.ts";
 import { runSpecFlow } from "../src/flow/spec-flow.ts";
 import { fillAnswers } from "../src/spec/answers.ts";
 import { readState } from "../src/spec/state.ts";
@@ -227,6 +227,52 @@ describe("spec-flow", () => {
       runSpecFlow({ cwd: project(), brief: "docs/briefs/greeting.md", ui: recordingUi(), agent: failing }),
       (err: DoppelblindError) => err.details.some((d) => d.startsWith("Agent trace: .doppelblind/runs/")),
     );
+  });
+
+  test.each([
+    ["time", 60_000, 120_000, "1 minute", "2 minutes"],
+    ["budget", 2, 4, "$2.00", "$4.00"],
+  ] as const)("increases the %s limit and retries only after approval", async (limit, initial, increased, from, to) => {
+    const root = project();
+    const calls: AgentRequest[] = [];
+    const agent: Agent = async (request) => {
+      calls.push(request);
+      if (calls.length === 1) throw new AgentLimitError(limit, "limit reached");
+      return { output: sampleSpec() };
+    };
+    const ui = recordingUi(["yes"]);
+
+    await runSpecFlow({
+      cwd: root,
+      brief: "docs/briefs/greeting.md",
+      ui,
+      agent,
+      timeoutMs: limit === "time" ? initial : 60_000,
+      maxBudgetUsd: limit === "budget" ? initial : 2,
+    });
+
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0][limit === "time" ? "timeoutMs" : "maxBudgetUsd"], initial);
+    assert.equal(calls[1][limit === "time" ? "timeoutMs" : "maxBudgetUsd"], increased);
+    assert.ok(ui.events.includes(
+      `choose: Agent reached the ${limit === "time" ? "time" : "cost"} limit (${from}). Increase it to ${to} and retry? -> yes`,
+    ));
+  });
+
+  test("does not retry after the user declines a limit increase", async () => {
+    const calls: AgentRequest[] = [];
+    const agent: Agent = async (request) => {
+      calls.push(request);
+      throw new AgentLimitError("budget", "limit reached");
+    };
+    const ui = recordingUi(["no"]);
+
+    await assert.rejects(
+      runSpecFlow({ cwd: project(), brief: "docs/briefs/greeting.md", ui, agent }),
+      /limit reached/,
+    );
+    assert.equal(calls.length, 1);
+    assert.ok(ui.events.some((event) => event.endsWith("retry? -> no")));
   });
 
   test("a citation of a non-binding source fails the gate and writes no spec", async () => {

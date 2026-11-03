@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, test } from "vitest";
 import { parseResponse, runClaude } from "../src/agent/claude.ts";
-import { DoppelblindError } from "../src/errors.ts";
+import { AgentLimitError, DoppelblindError } from "../src/errors.ts";
 
 const FAKE = path.join(import.meta.dirname, "fixtures", "fake-claude.mjs");
 const SUCCESS = JSON.stringify({ type: "result", subtype: "success", is_error: false, structured_output: { ok: true }, total_cost_usd: 0.25, duration_ms: 1200 });
@@ -111,7 +111,10 @@ describe("claude", () => {
 
   test("non-JSON output, error results and missing structured output fail", () => {
     assert.throws(() => parseResponse("garbage", "boom", 1), /no JSON result/);
-    assert.throws(() => parseResponse(JSON.stringify({ type: "result", subtype: "error_max_budget_usd", is_error: true }), "", 1), /Agent run failed/);
+    assert.throws(
+      () => parseResponse(JSON.stringify({ type: "result", subtype: "error_max_budget_usd", is_error: true }), "", 1),
+      (err) => err instanceof AgentLimitError && err.limit === "budget" && err.message === "Agent run failed.",
+    );
     assert.throws(() => parseResponse(JSON.stringify({ type: "result", subtype: "success", is_error: false }), "", 0), /no structured output/);
   });
 });
