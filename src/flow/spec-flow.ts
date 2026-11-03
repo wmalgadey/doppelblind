@@ -223,7 +223,7 @@ async function specCreate(ctx: Context, recorded: BriefState | undefined, previo
     }, () => `${output.criteria.length} criteria`);
     const lastQuestions = readOutput(ctx.root, recorded)?.open_questions ?? [];
     const used = [...(previous?.answers ?? []), ...lastQuestions].map((q) => q.id);
-    const spec = renumberQuestions(output, highestQuestion(used));
+    const spec = renumberQuestions(output, Math.max(recorded?.lastQuestion ?? 0, highestQuestion(used)));
     writeFileSync(path.join(runDir, OUTPUT_FILE), JSON.stringify(spec, null, 2) + "\n");
 
     const unanswered = final ? spec.open_questions.map((q) => q.id) : [];
@@ -240,6 +240,7 @@ async function specCreate(ctx: Context, recorded: BriefState | undefined, previo
     folder: toProjectPath(ctx.root, path.dirname(specFile)),
     ...(final && { final: true as const }),
     run: toProjectPath(ctx.root, runDir),
+    lastQuestion: Math.max(recorded?.lastQuestion ?? 0, highestQuestion(spec.open_questions.map((q) => q.id))),
   });
 
   return { ...counts(spec, record), specFile, status, stopped: [] };

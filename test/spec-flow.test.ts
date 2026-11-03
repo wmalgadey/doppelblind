@@ -84,6 +84,19 @@ describe("spec-flow", () => {
     assert.match(readFileSync(path.join(root, "specs/001-greet-everyone/answers.md"), "utf8"), /Hello and welcome\./);
   });
 
+  test("a question number is never reused, even after a run without questions", async () => {
+    const root = project();
+    const opts = { cwd: root, brief: "docs/briefs/greeting.md", ui: recordingUi() };
+    await runSpecFlow({ ...opts, agent: fakeAgent(sampleSpec()) });
+    await runSpecFlow({ ...opts, agent: fakeAgent(sampleSpec({ open_questions: [] })) });
+    const third = await runSpecFlow({
+      ...opts,
+      agent: fakeAgent(sampleSpec({ open_questions: [{ id: "Q-01", question: "Which colour?", concerns: [] }] })),
+    });
+    assert.match(readFileSync(third.specFile, "utf8"), /### Q-02\n\nWhich colour\?/);
+    assert.equal(readState(root)["docs/briefs/greeting.md"].lastQuestion, 2);
+  });
+
   test("a brief's spec is recognised from the run state, not from what spec.md says", async () => {
     const root = project();
     const opts = { cwd: root, brief: "docs/briefs/greeting.md", ui: recordingUi() };
@@ -95,7 +108,7 @@ describe("spec-flow", () => {
     assert.deepEqual(Object.keys(state), ["docs/briefs/greeting.md"]);
     assert.equal(state["docs/briefs/greeting.md"].folder, "specs/001-greet-everyone");
     // ready or open is computed from the spec, never stored
-    assert.deepEqual(Object.keys(state["docs/briefs/greeting.md"]).sort(), ["folder", "run"]);
+    assert.deepEqual(Object.keys(state["docs/briefs/greeting.md"]).sort(), ["folder", "lastQuestion", "run"]);
   });
 
   test("answers accumulate across spec-create runs with their question's text", async () => {
@@ -438,7 +451,7 @@ describe("spec-flow: continuing a feature", () => {
     assert.equal(result.openQuestions, 0);
     assert.equal(state(root).final, true);
     // the extra run's questions follow Q-01 and Q-02 of the first run
-    assert.deepEqual(state(root), { folder: "specs/001-greet-everyone", run: state(root).run, final: true });
+    assert.deepEqual(state(root), { folder: "specs/001-greet-everyone", run: state(root).run, final: true, lastQuestion: 4 });
 
     const md = readFileSync(result.specFile, "utf8");
     assert.match(md, /## Unanswered\n\n- Q-03: Which words does the greeting use\?\n- Q-04: Which colour is the greeting\?\n\n## Open questions\n\nNone\.\n$/);
@@ -532,7 +545,7 @@ describe("spec-flow: continuing a feature", () => {
     assert.equal(result.status, "final");
     assert.deepEqual([result.leftOpen, result.outOfScope, result.unanswered, result.openQuestions], [1, 0, 1, 0]);
     assert.equal(state(root).final, true);
-    assert.deepEqual(Object.keys(state(root)).sort(), ["final", "folder", "run"]);
+    assert.deepEqual(Object.keys(state(root)).sort(), ["final", "folder", "lastQuestion", "run"]);
     assert.deepEqual(loggedAnswers(root), ["Q-01 free"]);
     const md = readFileSync(specFile, "utf8");
     assert.match(md, /## Left open\n\n- Q-01: Which words does the greeting use\?\n\n## Out of scope\n\nNone\.\n\n## Unanswered\n\n- Q-02: Which colour is the greeting\?\n\n## Open questions\n\nNone\.\n$/);
