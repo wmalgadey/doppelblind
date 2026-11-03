@@ -11,6 +11,14 @@ export interface Contract {
   sources: string[];
   /** Directory that holds the numbered spec folders. */
   specs: string;
+  /** Paths that hold implementation code; absent from what the test author can access. */
+  implementation?: string[];
+  /** Paths that hold the plan; absent from what the test author can access. */
+  plan?: string[];
+  /** The test author's path: each spec's acceptance tests and review file go into a folder named after the spec's. */
+  acceptanceTests?: string;
+  /** Command that runs one test file, with `{file}` for its path; without `{file}`, the path is appended. */
+  testCommand?: string;
 }
 
 const DEFAULTS = { sources: ["docs/product.md", "docs/decisions.md"], specs: "specs" };
@@ -31,17 +39,33 @@ export function loadContract(cwd: string): Contract {
     throw new DoppelblindError(`${file} must contain a JSON object.`);
   }
 
-  const { sources = DEFAULTS.sources, specs = DEFAULTS.specs } = raw as Record<string, unknown>;
+  const { sources = DEFAULTS.sources, specs = DEFAULTS.specs, implementation, plan, acceptanceTests, testCommand } =
+    raw as Record<string, unknown>;
   if (!Array.isArray(sources) || !sources.every((s) => typeof s === "string")) {
     throw new DoppelblindError(`${file}: "sources" must be a list of paths.`);
   }
   if (typeof specs !== "string" || specs.trim() === "") {
     throw new DoppelblindError(`${file}: "specs" must be a path.`);
   }
+  for (const [key, value] of Object.entries({ implementation, plan })) {
+    if (value !== undefined && (!Array.isArray(value) || !value.every((s) => typeof s === "string"))) {
+      throw new DoppelblindError(`${file}: "${key}" must be a list of paths.`);
+    }
+  }
+  for (const [key, value] of Object.entries({ acceptanceTests, testCommand })) {
+    if (value !== undefined && (typeof value !== "string" || value.trim() === "")) {
+      throw new DoppelblindError(`${file}: "${key}" must be a ${key === "testCommand" ? "command" : "path"}.`);
+    }
+  }
+  const project = (p: string) => toProjectPath(root, path.resolve(root, p));
   return {
     root,
-    sources: sources.map((s) => toProjectPath(root, path.resolve(root, s))),
-    specs: toProjectPath(root, path.resolve(root, specs)),
+    sources: sources.map(project),
+    specs: project(specs),
+    ...(implementation !== undefined && { implementation: (implementation as string[]).map(project) }),
+    ...(plan !== undefined && { plan: (plan as string[]).map(project) }),
+    ...(acceptanceTests !== undefined && { acceptanceTests: project(acceptanceTests as string) }),
+    ...(testCommand !== undefined && { testCommand: testCommand as string }),
   };
 }
 
