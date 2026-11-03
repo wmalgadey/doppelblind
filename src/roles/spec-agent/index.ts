@@ -10,9 +10,15 @@ export interface Citation {
 export interface Criterion {
   id: string;
   title: string;
+  /** The reason a source gives for the criterion; null if none does. */
+  reason_in_source: string | null;
+  /** Verbatim text in one of the criterion's cited sources where it gives that reason; null with `reason_in_source`. */
+  reason_anchor: string | null;
   given: string;
   when: string;
   then: string;
+  /** One concrete wrong implementation the criterion fails, and which part of `then` makes the test fail for it. */
+  rejects: string;
   /** Whether an acceptance test proves the criterion, or the user's review where no test can decide it. */
   proven_by: "test" | "review";
   sources: Citation[];
@@ -33,6 +39,8 @@ export interface OpenQuestion {
 export interface SpecOutput {
   title: string;
   short_name: string;
+  /** Prose: the problem the change solves, for whom, and what it deliberately leaves out. */
+  introduction: string;
   criteria: Criterion[];
   wishes: string[];
   open_questions: OpenQuestion[];

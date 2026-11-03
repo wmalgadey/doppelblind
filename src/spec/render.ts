@@ -38,17 +38,20 @@ export function renderSpec(spec: SpecOutput, briefPath: string, briefLink: strin
   const listed = [["Left open", sections.leftOpen], ["Out of scope", sections.outOfScope], ["Unanswered", sections.unanswered]] as const;
   const byCriterion = [["Open questions", sections.open] as const, ...listed];
 
-  const lines = [`# ${spec.title}`, "", `Brief: [${briefPath}](${briefLink})`, "", "## Criteria", ""];
+  const lines = [`# ${spec.title}`, "", `Brief: [${briefPath}](${briefLink})`, "", spec.introduction.trim(), "", "## Criteria", ""];
 
   for (const c of spec.criteria) {
     lines.push(
       `### ${c.id}: ${c.title}`,
       "",
+      ...(c.reason_in_source === null ? [] : [`Why: ${c.reason_in_source}`, ""]),
       `- **Given** ${c.given}`,
       `- **When** ${c.when}`,
       `- **Then** ${c.then}`,
       "",
       `Proven by: ${c.proven_by === "review" ? "review" : "acceptance test"}`,
+      "",
+      `Rejects: ${c.rejects}`,
       "",
       `Sources: ${c.sources.map((s) => `\`${s.path}\` › ${s.anchor}`).join("; ")}`,
       "",

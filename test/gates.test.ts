@@ -33,9 +33,27 @@ describe("gates", () => {
       { ...sampleSpec(), left_open: [] },
       sampleSpec({ short_name: "Not A Slug" }),
       sampleSpec({ short_name: "single" }),
+      // a reason without the place its source gives it, or a place without a reason
+      sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], reason_anchor: null }] }),
+      sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], reason_in_source: null }] }),
+      sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], reason_anchor: "" }] }),
+      sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], reason_in_source: "" }] }),
     ]) {
       assert.throws(() => validateOutput(schema, output), DoppelblindError);
     }
+  });
+
+  test("a criterion without a reason in its sources passes the schema", () => {
+    const spec = sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], reason_in_source: null, reason_anchor: null }] });
+    assert.deepEqual(validateOutput(schema, spec), spec);
+  });
+
+  test("a reason anchor that appears in none of the criterion's cited sources fails", () => {
+    // OUT-01 appears in docs/product.md, which this criterion does not cite
+    const spec = sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], reason_anchor: "OUT-01 | turn a brief" }] });
+    assert.deepEqual(checkSpec(spec, sources), [
+      'AC-001 gives the reason anchor "OUT-01 | turn a brief", which appears in none of its cited sources.',
+    ]);
   });
 
   test("schema errors name the offending field", () => {
@@ -55,12 +73,12 @@ describe("gates", () => {
   });
 
   test("citing a path that is not a binding source fails", () => {
-    const spec = sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], sources: [{ path: "src/cli.ts", anchor: "main" }] }] });
+    const spec = sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], reason_in_source: null, reason_anchor: null, sources: [{ path: "src/cli.ts", anchor: "main" }] }] });
     assert.deepEqual(checkSpec(spec, sources), ["AC-001 cites src/cli.ts, which is not a binding source."]);
   });
 
   test("citing an anchor that does not appear in the source fails", () => {
-    const spec = sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], sources: [{ path: "docs/product.md", anchor: "OUT-99" }] }] });
+    const spec = sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], reason_in_source: null, reason_anchor: null, sources: [{ path: "docs/product.md", anchor: "OUT-99" }] }] });
     assert.deepEqual(checkSpec(spec, sources), ['AC-001 cites "OUT-99" in docs/product.md, which does not appear there.']);
   });
 

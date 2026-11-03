@@ -57,13 +57,17 @@ export function sampleSpec(overrides: Partial<SpecOutput> = {}): SpecOutput {
   return {
     title: "Grüße für alle",
     short_name: "greet-everyone",
+    introduction: "Everyone who runs the greeter gets greeted. Colours are not part of this change.",
     criteria: [
       {
         id: "AC-001",
         title: "Greeter greets",
+        reason_in_source: "Being greeted is the outcome the brief advances.",
+        reason_anchor: "I can be greeted.",
         given: "the greeter is installed",
         when: "I run it",
         then: "it prints a greeting",
+        rejects: "A greeter that exits without output fails, because it prints no greeting.",
         proven_by: "test",
         sources: [{ path: "docs/briefs/greeting.md", anchor: "## Walkthrough" }],
       },

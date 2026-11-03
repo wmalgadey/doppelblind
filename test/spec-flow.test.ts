@@ -61,7 +61,7 @@ describe("spec-flow", () => {
     const calls: AgentRequest[] = [];
     const rerun = sampleSpec({
       short_name: "other-name",
-      criteria: [{ ...sampleSpec().criteria[0], sources: [{ path: "specs/001-greet-everyone/answers.md", anchor: "Hello and welcome." }] }],
+      criteria: [{ ...sampleSpec().criteria[0], reason_in_source: null, reason_anchor: null, sources: [{ path: "specs/001-greet-everyone/answers.md", anchor: "Hello and welcome." }] }],
       open_questions: [{ id: "Q-01", question: "In which language is the greeting?", concerns: [] }],
     });
     const ui = recordingUi();

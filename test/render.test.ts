@@ -15,9 +15,15 @@ describe("render", () => {
     const md = renderSpec(sampleSpec(), "docs/briefs/greeting.md", "../../docs/briefs/greeting.md");
     assert.match(md, /^# Grüße für alle\n/);
     assert.match(md, /Brief: \[docs\/briefs\/greeting.md\]\(\.\.\/\.\.\/docs\/briefs\/greeting.md\)/);
-    assert.match(md, /### AC-001: Greeter greets\n\n- \*\*Given\*\* the greeter is installed\n- \*\*When\*\* I run it\n- \*\*Then\*\* it prints a greeting/);
-    assert.match(md, /- \*\*Then\*\* it prints a greeting\n\nProven by: acceptance test\n\nSources: `docs\/briefs\/greeting.md` › ## Walkthrough/);
+    assert.match(md, /Brief: .*\n\nEveryone who runs the greeter gets greeted\. Colours are not part of this change\.\n\n## Criteria\n/);
+    assert.match(md, /### AC-001: Greeter greets\n\nWhy: Being greeted is the outcome the brief advances\.\n\n- \*\*Given\*\* the greeter is installed\n- \*\*When\*\* I run it\n- \*\*Then\*\* it prints a greeting/);
+    assert.match(md, /- \*\*Then\*\* it prints a greeting\n\nProven by: acceptance test\n\nRejects: A greeter that exits without output fails, because it prints no greeting\.\n\nSources: `docs\/briefs\/greeting.md` › ## Walkthrough/);
     assert.match(md, /## Wishes\n\n- A colourful greeting\./);
+  });
+
+  test("a criterion whose sources give no reason has no Why line", () => {
+    const md = renderSpec(sampleSpec({ criteria: [{ ...sampleSpec().criteria[0], reason_in_source: null, reason_anchor: null }] }), "b.md", "b.md");
+    assert.match(md, /### AC-001: Greeter greets\n\n- \*\*Given\*\*/);
   });
 
   test("each open question gets an empty answer to fill in", () => {

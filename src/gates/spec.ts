@@ -4,7 +4,8 @@ import type { Source } from "../sources.ts";
 /**
  * Deterministic checks on a spec that its schema cannot express:
  * IDs are unique, no open question depends on an unknown question or concerns an unknown criterion,
- * and every citation names an allowed source and an anchor present in it.
+ * every citation names an allowed source and an anchor present in it,
+ * and a criterion's reason anchor appears in one of the sources it cites.
  * Returns one message per problem; an empty list means the spec passes.
  */
 export function checkSpec(spec: SpecOutput, sources: Source[]): string[] {
@@ -32,6 +33,10 @@ export function checkSpec(spec: SpecOutput, sources: Source[]): string[] {
       } else if (!content.includes(anchor)) {
         problems.push(`${criterion.id} cites "${anchor}" in ${path}, which does not appear there.`);
       }
+    }
+    const reason = criterion.reason_anchor;
+    if (reason !== null && !criterion.sources.some((s) => byPath.get(s.path)?.includes(reason))) {
+      problems.push(`${criterion.id} gives the reason anchor "${reason}", which appears in none of its cited sources.`);
     }
   }
   return problems;
