@@ -67,7 +67,7 @@ Limits: `--timeout` (default 30 minutes), `--budget` (default $10) and `--max-tu
 If the Claude CLI is not on the PATH, set `DOPPELBLIND_CLAUDE_BIN`. In a GitHub Codespace, the CLI ships with the VS Code extension:
 
 ```sh
-export DOPPELBLIND_CLAUDE_BIN=~/.vscode-remote/extensions/anthropic.claude-code-2.1.314-linux-x64/resources/native-binary/claude
+export DOPPELBLIND_CLAUDE_BIN=~/.vscode-remote/extensions/anthropic.claude-code-2.1.317-linux-x64/resources/native-binary/claude
 ```
 
 The version in the path changes when the extension updates; check `ls ~/.vscode-remote/extensions/`.
