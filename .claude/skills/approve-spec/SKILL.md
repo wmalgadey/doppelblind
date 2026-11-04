@@ -1,5 +1,5 @@
 ---
-name: spec-answers
+name: approve-spec
 description: Walk through the open questions of a spec.md and write the user's answers into its Answer fields. Use when the user wants to answer the open questions of a spec.
 model: sonnet
 ---

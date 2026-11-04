@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Mechanical helpers for the spec-approval skill. No dependencies, heuristic parsing.
+// Mechanical helpers for the approve-test skill. No dependencies, heuristic parsing.
 //
 //   literals   --spec <spec folder> --id <AC-nnn> -- <test files...>
 //   blind-copy <test files...>

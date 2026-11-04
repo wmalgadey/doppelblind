@@ -1,6 +1,6 @@
 ---
 name: test-back-translator
-description: Describes what a test file checks, in plain words, without knowing the requirement behind it. Started by the spec-approval skill.
+description: Describes what a test file checks, in plain words, without knowing the requirement behind it. Started by the approve-test skill.
 tools: Read
 model: haiku
 ---

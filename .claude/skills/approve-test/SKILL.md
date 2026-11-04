@@ -1,8 +1,8 @@
 ---
-name: spec-approval
+name: approve-test
 description: Help the user approve a spec's acceptance tests before implementation - decide the test author's assumptions, and review the criteria that signals point to. Use when the user wants to decide assumptions, or approve or review the acceptance tests of a spec.
 model: sonnet
-allowed-tools: Read, Edit, Write, Glob, Grep, AskUserQuestion, Task, Bash(node .claude/skills/spec-approval/scripts/approval-tools.mjs:*)
+allowed-tools: Read, Edit, Write, Glob, Grep, AskUserQuestion, Task, Bash(node .claude/skills/approve-test/scripts/approval-tools.mjs:*)
 ---
 
 # Approve the acceptance tests of a spec
@@ -15,7 +15,7 @@ You prepare, ask and write down; the user decides. Every text that binds a later
 
 - Spec folder: `specs/<spec>/`, holding spec.md, assumptions.md and approval.md.
 - Test folder: the path `.doppelblind.conf` declares for the test author, followed by `<spec>/`.
-- Tools: `node .claude/skills/spec-approval/scripts/approval-tools.mjs <command>`.
+- Tools: `node .claude/skills/approve-test/scripts/approval-tools.mjs <command>`.
 
 ## Before you start
 
