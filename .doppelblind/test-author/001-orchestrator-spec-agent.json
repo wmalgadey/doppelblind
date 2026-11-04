@@ -1,0 +1,776 @@
+{
+  "run": ".doppelblind/runs/2026-11-04T01-47-34-588Z-test-author",
+  "tests": [
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-folder-creation.test.ts",
+      "name": "spec folder creation > creates spec.md in exactly one new subfolder of specs",
+      "criterion": "AC-001",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-folder-creation.test.ts",
+      "name": "spec folder creation > complete flow writes only inside specs, .doppelblind and .doppelblind.conf",
+      "criterion": "AC-002",
+      "assumptions": [
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-005"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-folder-creation.test.ts",
+      "name": "spec folder creation > accepts the absolute path of the brief",
+      "criterion": "AC-003",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-folder-creation.test.ts",
+      "name": "spec folder creation > resolves the brief from a subdirectory and writes into the root specs folder",
+      "criterion": "AC-004",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-folder-creation.test.ts",
+      "name": "spec folder creation > numbers the first spec folder 001- when there is no specs folder",
+      "criterion": "AC-009",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-folder-creation.test.ts",
+      "name": "spec folder creation > numbers the first spec folder 001- when the specs folder is empty",
+      "criterion": "AC-009",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-folder-creation.test.ts",
+      "name": "spec folder creation > numbers after the highest numbered subfolder and leaves other entries alone",
+      "criterion": "AC-010",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-009"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-folder-creation.test.ts",
+      "name": "spec folder creation > names the folder after the short name the spec agent gives",
+      "criterion": "AC-011",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/brief-path-validation.test.ts",
+      "name": "brief path validation > without a brief path it names the missing path and shows the usage",
+      "criterion": "AC-005",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-006"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/brief-path-validation.test.ts",
+      "name": "brief path validation > rejects a brief path that does not exist",
+      "criterion": "AC-006",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-007"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/brief-path-validation.test.ts",
+      "name": "brief path validation > rejects a brief path that is a directory",
+      "criterion": "AC-006",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-007"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/brief-path-validation.test.ts",
+      "name": "brief path validation > rejects a brief file that cannot be read",
+      "criterion": "AC-006",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-007"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/brief-path-validation.test.ts",
+      "name": "brief path validation > rejects a brief file outside the git repository",
+      "criterion": "AC-006",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-007"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/configuration.test.ts",
+      "name": "project configuration > creates .doppelblind.conf at the repository root when there is none",
+      "criterion": "AC-007",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-004"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/configuration.test.ts",
+      "name": "project configuration > fails without creating a spec when the configuration declares no specs folder",
+      "criterion": "AC-008",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-004",
+        "A-008"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-document.test.ts",
+      "name": "spec.md layout > a spec from a German brief has its title, brief link, introduction and English section labels in order",
+      "criterion": "AC-012",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-010"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-document.test.ts",
+      "name": "spec.md layout > a criterion has a heading with its ID and title followed by its fields in order",
+      "criterion": "AC-013",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-010",
+        "A-011"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-document.test.ts",
+      "name": "spec.md layout > wishes are list items and an open question shows question, context, dependency and an empty answer",
+      "criterion": "AC-014",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-010",
+        "A-012"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/agent-input-and-run-record.test.ts",
+      "name": "spec agent input and run record > the spec agent starts in an empty working directory outside the repository",
+      "criterion": "AC-016",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-013"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/agent-input-and-run-record.test.ts",
+      "name": "spec agent input and run record > the recorded input holds the brief and declared sources but not undeclared files",
+      "criterion": "AC-017",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-014"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/agent-input-and-run-record.test.ts",
+      "name": "spec agent input and run record > the run folder in .doppelblind holds the agent input with the brief and the agent CLI run log",
+      "criterion": "AC-018",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-015"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/progress-output.test.ts",
+      "name": "progress output > standard error shows each spec step done, in order",
+      "criterion": "AC-019",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-016"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/progress-output.test.ts",
+      "name": "progress output > the final output shows the criteria and open question counts and the spec.md path",
+      "criterion": "AC-021",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-017"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/progress-output.test.ts",
+      "name": "progress output > standard output holds only the spec.md path when piped",
+      "criterion": "AC-022",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-018"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/progress-output.test.ts",
+      "name": "progress output > standard error redirected to a file has no cursor control sequences or spinner frames",
+      "criterion": "AC-023",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-019"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/agent-failures.test.ts",
+      "name": "agent CLI failures > an agent CLI that is not logged in fails the spec-agent step and names the run folder",
+      "criterion": "AC-024",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-020"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/agent-failures.test.ts",
+      "name": "agent CLI failures > a failing agent CLI creates no spec folder and keeps the recorded input",
+      "criterion": "AC-025",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-021"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/agent-failures.test.ts",
+      "name": "agent CLI failures > an interrupted agent CLI creates no spec folder and keeps the recorded input",
+      "criterion": "AC-025",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-021"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/agent-failures.test.ts",
+      "name": "agent CLI failures > a failing agent CLI leaves an existing spec.md byte-for-byte unchanged",
+      "criterion": "AC-025",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-021",
+        "A-027"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/agent-failures.test.ts",
+      "name": "agent CLI failures > an interrupted agent CLI leaves an existing spec.md byte-for-byte unchanged",
+      "criterion": "AC-025",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-021",
+        "A-027"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/agent-failures.test.ts",
+      "name": "agent CLI failures > output without a source for a criterion fails validation and creates no spec folder",
+      "criterion": "AC-026",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-022"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/agent-failures.test.ts",
+      "name": "agent CLI failures > output without a source for a criterion leaves an existing spec.md unchanged",
+      "criterion": "AC-026",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-022",
+        "A-027"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/clarification-rounds.test.ts",
+      "name": "clarification rounds > another spec-create run replaces spec.md in the same spec folder",
+      "criterion": "AC-027",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-023",
+        "A-027"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/clarification-rounds.test.ts",
+      "name": "clarification rounds > the next spec-create run gets brief, sources and answers but not the previous spec",
+      "criterion": "AC-028",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-014",
+        "A-024",
+        "A-027"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/clarification-rounds.test.ts",
+      "name": "clarification rounds > own text, free and out of scope reach the spec agent as answers, an empty field does not",
+      "criterion": "AC-029",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-024",
+        "A-025",
+        "A-027"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/clarification-rounds.test.ts",
+      "name": "clarification rounds > runs on a different brief leave another brief's spec folder unchanged",
+      "criterion": "AC-030",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-030"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/clarification-rounds.test.ts",
+      "name": "clarification rounds > finishing the clarify run marks the empty question unanswered and ends the spec step",
+      "criterion": "AC-031",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-005",
+        "A-024",
+        "A-026",
+        "A-027"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/clarification-rounds.test.ts",
+      "name": "clarification rounds > choosing another spec-create run when all questions are answered replaces spec.md",
+      "criterion": "AC-032",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-024",
+        "A-027"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/clarification-rounds.test.ts",
+      "name": "clarification rounds > choosing to stop when all questions are answered starts no spec-create run now or later",
+      "criterion": "AC-032",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-024",
+        "A-027"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/clarification-rounds.test.ts",
+      "name": "clarification rounds > a spec without open questions is final and a second run leaves it unchanged",
+      "criterion": "AC-033",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-027"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/clarification-rounds.test.ts",
+      "name": "clarification rounds > with standard input closed the choice stops with a message and no spec-create run",
+      "criterion": "AC-034",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-024",
+        "A-028"
+      ]
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/clarification-rounds.test.ts",
+      "name": "clarification rounds > six free answers report the brief as too vague, naming each question and its brief step",
+      "criterion": "AC-035",
+      "assumptions": [
+        "A-001",
+        "A-002",
+        "A-003",
+        "A-004",
+        "A-024",
+        "A-029"
+      ]
+    }
+  ],
+  "helpers": [
+    "tests/acceptance/001-orchestrator-spec-agent/harness.ts"
+  ],
+  "review": "tests/acceptance/001-orchestrator-spec-agent/review.md",
+  "results": [
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/agent-failures.test.ts",
+      "name": "agent CLI failures > an agent CLI that is not logged in fails the spec-agent step and names the run folder",
+      "criterion": "AC-024",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/agent-failures.test.ts",
+      "name": "agent CLI failures > a failing agent CLI creates no spec folder and keeps the recorded input",
+      "criterion": "AC-025",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/agent-failures.test.ts",
+      "name": "agent CLI failures > an interrupted agent CLI creates no spec folder and keeps the recorded input",
+      "criterion": "AC-025",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/agent-failures.test.ts",
+      "name": "agent CLI failures > a failing agent CLI leaves an existing spec.md byte-for-byte unchanged",
+      "criterion": "AC-025",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/agent-failures.test.ts",
+      "name": "agent CLI failures > an interrupted agent CLI leaves an existing spec.md byte-for-byte unchanged",
+      "criterion": "AC-025",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/agent-failures.test.ts",
+      "name": "agent CLI failures > output without a source for a criterion fails validation and creates no spec folder",
+      "criterion": "AC-026",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/agent-failures.test.ts",
+      "name": "agent CLI failures > output without a source for a criterion leaves an existing spec.md unchanged",
+      "criterion": "AC-026",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/agent-input-and-run-record.test.ts",
+      "name": "spec agent input and run record > the spec agent starts in an empty working directory outside the repository",
+      "criterion": "AC-016",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/agent-input-and-run-record.test.ts",
+      "name": "spec agent input and run record > the recorded input holds the brief and declared sources but not undeclared files",
+      "criterion": "AC-017",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/agent-input-and-run-record.test.ts",
+      "name": "spec agent input and run record > the run folder in .doppelblind holds the agent input with the brief and the agent CLI run log",
+      "criterion": "AC-018",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/brief-path-validation.test.ts",
+      "name": "brief path validation > without a brief path it names the missing path and shows the usage",
+      "criterion": "AC-005",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/brief-path-validation.test.ts",
+      "name": "brief path validation > rejects a brief path that does not exist",
+      "criterion": "AC-006",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/brief-path-validation.test.ts",
+      "name": "brief path validation > rejects a brief path that is a directory",
+      "criterion": "AC-006",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/brief-path-validation.test.ts",
+      "name": "brief path validation > rejects a brief file that cannot be read",
+      "criterion": "AC-006",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/brief-path-validation.test.ts",
+      "name": "brief path validation > rejects a brief file outside the git repository",
+      "criterion": "AC-006",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/clarification-rounds.test.ts",
+      "name": "clarification rounds > another spec-create run replaces spec.md in the same spec folder",
+      "criterion": "AC-027",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/clarification-rounds.test.ts",
+      "name": "clarification rounds > the next spec-create run gets brief, sources and answers but not the previous spec",
+      "criterion": "AC-028",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/clarification-rounds.test.ts",
+      "name": "clarification rounds > own text, free and out of scope reach the spec agent as answers, an empty field does not",
+      "criterion": "AC-029",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/clarification-rounds.test.ts",
+      "name": "clarification rounds > runs on a different brief leave another brief's spec folder unchanged",
+      "criterion": "AC-030",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/clarification-rounds.test.ts",
+      "name": "clarification rounds > finishing the clarify run marks the empty question unanswered and ends the spec step",
+      "criterion": "AC-031",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/clarification-rounds.test.ts",
+      "name": "clarification rounds > choosing another spec-create run when all questions are answered replaces spec.md",
+      "criterion": "AC-032",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/clarification-rounds.test.ts",
+      "name": "clarification rounds > choosing to stop when all questions are answered starts no spec-create run now or later",
+      "criterion": "AC-032",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/clarification-rounds.test.ts",
+      "name": "clarification rounds > a spec without open questions is final and a second run leaves it unchanged",
+      "criterion": "AC-033",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/clarification-rounds.test.ts",
+      "name": "clarification rounds > with standard input closed the choice stops with a message and no spec-create run",
+      "criterion": "AC-034",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/clarification-rounds.test.ts",
+      "name": "clarification rounds > six free answers report the brief as too vague, naming each question and its brief step",
+      "criterion": "AC-035",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/configuration.test.ts",
+      "name": "project configuration > creates .doppelblind.conf at the repository root when there is none",
+      "criterion": "AC-007",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/configuration.test.ts",
+      "name": "project configuration > fails without creating a spec when the configuration declares no specs folder",
+      "criterion": "AC-008",
+      "status": "passed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/progress-output.test.ts",
+      "name": "progress output > standard error shows each spec step done, in order",
+      "criterion": "AC-019",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/progress-output.test.ts",
+      "name": "progress output > the final output shows the criteria and open question counts and the spec.md path",
+      "criterion": "AC-021",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/progress-output.test.ts",
+      "name": "progress output > standard output holds only the spec.md path when piped",
+      "criterion": "AC-022",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/progress-output.test.ts",
+      "name": "progress output > standard error redirected to a file has no cursor control sequences or spinner frames",
+      "criterion": "AC-023",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-document.test.ts",
+      "name": "spec.md layout > a spec from a German brief has its title, brief link, introduction and English section labels in order",
+      "criterion": "AC-012",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-document.test.ts",
+      "name": "spec.md layout > a criterion has a heading with its ID and title followed by its fields in order",
+      "criterion": "AC-013",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-document.test.ts",
+      "name": "spec.md layout > wishes are list items and an open question shows question, context, dependency and an empty answer",
+      "criterion": "AC-014",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-folder-creation.test.ts",
+      "name": "spec folder creation > creates spec.md in exactly one new subfolder of specs",
+      "criterion": "AC-001",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-folder-creation.test.ts",
+      "name": "spec folder creation > complete flow writes only inside specs, .doppelblind and .doppelblind.conf",
+      "criterion": "AC-002",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-folder-creation.test.ts",
+      "name": "spec folder creation > accepts the absolute path of the brief",
+      "criterion": "AC-003",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-folder-creation.test.ts",
+      "name": "spec folder creation > resolves the brief from a subdirectory and writes into the root specs folder",
+      "criterion": "AC-004",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-folder-creation.test.ts",
+      "name": "spec folder creation > numbers the first spec folder 001- when there is no specs folder",
+      "criterion": "AC-009",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-folder-creation.test.ts",
+      "name": "spec folder creation > numbers the first spec folder 001- when the specs folder is empty",
+      "criterion": "AC-009",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-folder-creation.test.ts",
+      "name": "spec folder creation > numbers after the highest numbered subfolder and leaves other entries alone",
+      "criterion": "AC-010",
+      "status": "failed"
+    },
+    {
+      "file": "tests/acceptance/001-orchestrator-spec-agent/spec-folder-creation.test.ts",
+      "name": "spec folder creation > names the folder after the short name the spec agent gives",
+      "criterion": "AC-011",
+      "status": "failed"
+    }
+  ],
+  "handed": {},
+  "awaitingDecisions": true
+}
