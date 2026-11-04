@@ -16,6 +16,8 @@ An open question is unanswered when its **Answer:** field is empty or holds only
 
 If the user names no spec, list the folders under `specs/` that have a spec.md with at least one unanswered question, and ask which one.
 
+If the spec step of this spec is final, say so and stop: no further spec-create run starts, so no answer would reach the spec agent. It is final when the entry in `.doppelblind/specs.json` whose `folder` is this spec folder has `"final": true`.
+
 ## Order
 
 Go through the unanswered open questions. Ask a question only after every question in its "Depends on" line has been asked.
@@ -27,7 +29,7 @@ At the start, count the open questions in spec.md and how many of them are not u
 Ask with the AskUserQuestion tool, one question per call:
 
 - `header`: the question ID, e.g. `Q-03`.
-- `question`: starts with the position, e.g. `Question 4 of 21:`, then the question's text exactly as in spec.md, then its context line, then the IDs of the criteria whose "Open questions" line lists this question. If none does, say so.
+- `question`: starts with the position, e.g. `Question 4 of 21:`, then the question's text exactly as in spec.md, then its context line, then the ID and title of each criterion whose "Open questions" line lists this question. If none does, say so.
 - `options`, in this order:
   - one or two suggested answers (see below)
   - label `free`, description `Left open on purpose; nobody tests it.`
@@ -53,7 +55,7 @@ When the user chooses a suggestion, its answer is the suggestion's `preview` tex
 
 ## Free text answers
 
-Take the user's text exactly as written. Do not shorten, translate, correct or complete it.
+If the text is `free` or `out of scope` in any case, with nothing else but whitespace, the answer is `free` or `out of scope`, written in lower case. Otherwise take the user's text exactly as written. Do not shorten, translate, correct or complete it.
 
 Before you accept it, check two things and tell the user only what you find, in one sentence each:
 
@@ -71,3 +73,11 @@ Write it with the Edit tool on the line after its **Answer:** field, followed by
 ## Stopping
 
 The user may stop at any time: by dismissing a question, or by typing `stop` as the answer. Then write nothing for that question and end. Answers already written stay. Running the skill again continues with the first question that is still unanswered.
+
+## End
+
+Say how many open questions are answered with own text, with `free` and with `out of scope`, and how many are still unanswered.
+
+Count the questions answered `free`: the `free` answers in spec.md plus the entries of its Left open section. If that number is above the limit, say that the next run will report the brief as too vague and name those questions. The limit is `limits.maxFreeAnswers` in `.doppelblind.conf`, or 5 if it sets none.
+
+The next step is to run the spec command on the brief again, which starts the next spec-create run with these answers.
