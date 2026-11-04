@@ -38,6 +38,13 @@ describe("answers", () => {
     assert.deepEqual(readAnswers("### Q-07\n\nWhy?\n\n**Answer:** Because.\n"), [{ id: "Q-07", question: "Why?", answer: "Because." }]);
   });
 
+  test("the words of the Answer mark inside a question's text are not its Answer field", () => {
+    const md = "### Q-67\n\nWhat if the user removed the **Answer:** field?\n\n**Answer:**\n\n\n### Q-68\n\nWhy?\n\n**Answer:**\n\nBecause.\n";
+    assert.deepEqual(readAnswers(md), [{ id: "Q-68", question: "Why?", answer: "Because." }]);
+    assert.equal(fillAnswers(md, [{ id: "Q-67", answer: "It stops." }]),
+      "### Q-67\n\nWhat if the user removed the **Answer:** field?\n\n**Answer:**\n\nIt stops.\n\n### Q-68\n\nWhy?\n\n**Answer:**\n\nBecause.\n");
+  });
+
   test("the answer log keeps each answer with its question and reads back", () => {
     const answers = [
       { id: "Q-01", question: "Which words?", answer: "Hello." },

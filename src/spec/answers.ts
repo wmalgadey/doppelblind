@@ -1,3 +1,5 @@
+import { findField } from "./field.ts";
+
 /** An open question the user has answered; its ID names the same question across all spec-create runs of a brief. */
 export interface Answer {
   id: string;
@@ -30,11 +32,11 @@ export function readAnswers(markdown: string): Answer[] {
   // split with a capture group yields [before, id, body, id, body, ...]
   for (let i = 1; i < parts.length; i += 2) {
     const body = parts[i + 1];
-    const mark = body.indexOf(ANSWER_MARK);
-    if (mark < 0) continue;
-    const answer = body.slice(mark + ANSWER_MARK.length).trim();
+    const mark = findField(body, ANSWER_MARK);
+    if (!mark) continue;
+    const answer = body.slice(mark.end).trim();
     if (answer === "" || answer === UNANSWERED) continue;
-    const head = body.slice(0, mark);
+    const head = body.slice(0, mark.start);
     const question = head.replace(/^_(Context|Depends on): .*_$/gm, "").trim();
     const context = /^_Context: (.*)_$/m.exec(head)?.[1].trim();
     answered.push({ id: parts[i], question, answer, ...(context && { context }) });
@@ -51,7 +53,9 @@ export function fillAnswers(markdown: string, answers: { id: string; answer: str
   for (const { id, answer } of answers) {
     const heading = result.search(new RegExp(`^### ${id}[ \\t]*$`, "m"));
     if (heading < 0) continue;
-    const field = result.indexOf(ANSWER_MARK, heading) + ANSWER_MARK.length;
+    const mark = findField(result, ANSWER_MARK, heading);
+    if (!mark) continue;
+    const field = mark.end;
     const rest = result.slice(field);
     const end = rest.search(QUESTION_HEADING);
     const current = (end < 0 ? rest : rest.slice(0, end)).trim();

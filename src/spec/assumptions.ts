@@ -1,3 +1,5 @@
+import { findField } from "./field.ts";
+
 /** The file next to spec.md in which the user decides the test author's assumptions. */
 export const ASSUMPTIONS_FILE = "assumptions.md";
 
@@ -55,14 +57,14 @@ export function readAssumptions(markdown: string): RecordedAssumption[] {
   // split with a capture group yields [before, id, body, id, body, ...]
   for (let i = 1; i < parts.length; i += 2) {
     const body = parts[i + 1];
-    const mark = body.indexOf(DECISION_MARK);
-    const head = mark < 0 ? body : body.slice(0, mark);
-    const raw = mark < 0 ? "" : body.slice(mark + DECISION_MARK.length).trim();
+    const mark = findField(body, DECISION_MARK);
+    const head = mark ? body.slice(0, mark.start) : body;
+    const raw = mark ? body.slice(mark.end).trim() : "";
     const assumptionAt = head.indexOf(ASSUMPTION_MARK);
-    const filesAt = head.indexOf(FILES_MARK);
+    const filesAt = findField(head, FILES_MARK)?.start ?? -1;
     const assumption = assumptionAt < 0 ? "" : head.slice(assumptionAt + ASSUMPTION_MARK.length, filesAt < 0 ? undefined : filesAt).trim();
     const files = filesAt < 0 ? [] : [...head.slice(filesAt).matchAll(/^- (.+)$/gm)].map((m) => m[1].trim());
-    const parsed = mark < 0 ? { problem: `no ${DECISION_MARK} field` } : parseDecision(raw);
+    const parsed = !mark ? { problem: `no ${DECISION_MARK} field` } : parseDecision(raw);
     result.push({ id: parts[i], criterion: CRITERION.exec(head)?.[1].trim() ?? "", assumption, files, raw, ...parsed });
   }
   return result;

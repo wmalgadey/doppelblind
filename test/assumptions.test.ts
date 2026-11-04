@@ -49,6 +49,13 @@ describe("assumptions", () => {
     assert.deepEqual(readAssumptions(renderAssumptions("spec.md", [accepted])), [accepted]);
   });
 
+  test("the words of the Decision and Test files marks inside an assumption are not its fields", () => {
+    const entry = { id: "A-001", criterion: "AC-001", assumption: "An empty **Decision:** field and a missing **Test files:** list stop the run.", files: ["tests/a.test.ts"] };
+    const md = renderAssumptions("spec.md", [entry]);
+    assert.deepEqual(readAssumptions(md).map(({ assumption, files, raw, problem }) => ({ assumption, files, raw, problem })),
+      [{ assumption: entry.assumption, files: ["tests/a.test.ts"], raw: "", problem: "no decision" }]);
+  });
+
   test("every assumption without a valid decision is named with what is wrong", () => {
     const md = withDecision("rejected") + "\n## A-002\n\n**Criterion:** AC-001\n\n**Assumption:** Exit code 0.\n\n**Decision:**\n\naccepted\n" +
       "\n## A-003\n\n**Criterion:** AC-001\n\n**Assumption:** No decision field.\n";
