@@ -2,441 +2,343 @@
 
 Brief: [docs/briefs/test-agent.md](../../docs/briefs/test-agent.md)
 
-This change covers the step after the spec (OUT-02). Once a spec is final, it goes to the test author, an agent role that never sees the implementation. The test author writes the acceptance tests for every criterion that a test can prove. For criteria that only the user's review can prove, it writes a review file that helps the user check each of those criteria. The user starts this step in one of two ways: by continuing the flow with the Doppelblind flow command, or by running the test agent directly as a single step on a brief or a spec. The TUI shows what is happening and ends by saying what the agent produced. When everything is fine for the user, the acceptance tests are locked, which freezes them.
+With OUT-01, Doppelblind turns a brief into a final spec whose criteria each cite a source. This change delivers OUT-02. A user hands a final spec to a test author agent, either by running the flow command again or by starting the test author on its own. The agent never sees the implementation or the plan. It writes acceptance tests for every criterion proven by test and lists the assumptions it had to make. For criteria proven by review, it produces a review file that helps the user check them one by one. The TUI shows each step of the run and, at the end, what was produced.
 
-The test author gets a narrow view. It sees only the ID, Given, When and Then of the criteria proven by test, the existing acceptance tests and the test infrastructure. Implementation code and the plan, which the project declares in its contract, are technically kept out of its reach. Its writes are confined to the test path the contract declares, and its run is bounded by time, cost and turns. This change leaves out the approval before implementation (core loop step 8). It also leaves open on purpose: when an end-to-end review list is produced, how the test author's output is validated against a schema, how its assumptions are recorded, and anything the final output shows beyond what the brief and the answers require.
+The approval before implementation is out of scope for this change. So are what happens when the test author's structured output is invalid and whether an end-to-end review list is produced: both are left open on purpose. As already decided, all agent output is in English.
 
 ## Criteria
 
-### AC-001: Continuing the flow starts the test author for a final spec
+### AC-001: Continuing the flow starts the test author on a final spec
 
-- **Given** A project whose .doppelblind.conf declares the implementation paths, the plan paths and the test author's test path; the project has existing tests; a brief whose connected spec is final, has at least one criterion proven by test, and has no acceptance tests yet
-- **When** The user runs the Doppelblind flow command again for that brief (not the single-step test agent command)
-- **Then** A test author run starts: the TUI shows the step line for reading the final spec, and a new test author run folder appears in the project's .doppelblind folder
+- **Given** A project fulfilling the contract, with a brief whose spec is final and has at least one criterion proven by test, and with no acceptance tests yet for that spec
+- **When** The user runs the Doppelblind flow command again for that brief
+- **Then** A test author run starts for that spec: a new test author run folder appears in the project's .doppelblind folder, and the TUI shows the test author steps
 
 Proven by: acceptance test
 
-Rejects: A flow command that stops after the spec is final and never starts the test author fails, because no test author step line appears and no test author run folder is created
+Rejects: A flow command that reports the flow as finished once the spec is final and never starts the test author fails, because no test author run folder appears
 
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › I meant continuing the flow by using the flow command again (not the specific agent command); `docs/briefs/test-agent.md` › Ich nutze die Doppelblind-CLI und starte den Flow erneut oder direkt den Test-Agenten (für einen Einzelschritt).
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › I meant continuing the flow by using the flow command again; `docs/briefs/test-agent.md` › Ich nutze die Doppelblind-CLI und starte den Flow erneut oder direkt den Test-Agenten
+
+### AC-002: Single-step start on a brief uses its connected spec
+
+- **Given** A project with a brief connected to a final spec that has at least one criterion proven by test
+- **When** The user starts the test author directly as a single step and names the brief
+- **Then** A test author run starts for the spec connected to that brief, and the inputs recorded in its run folder contain that spec's criteria
+
+Proven by: acceptance test
+
+Rejects: A single-step command that accepts only a spec path and rejects a brief fails, because no test author run starts for the connected spec
+
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › the brief (which is "connected" to a spec) or a specific spec
 
 Unanswered: Q-43
 
-### AC-002: Direct start accepts a brief and uses its connected spec
+### AC-003: Single-step start on a named spec
 
-- **Given** The same project as in AC-001, with a brief whose connected spec is final
-- **When** The user starts the test agent directly as a single step and names the brief (command and arguments are deliberately unspecified)
-- **Then** A test author run starts on the spec connected to that brief, and the run folder's recorded inputs contain criteria of that spec
-
-Proven by: acceptance test
-
-Rejects: A single-step command that accepts only a spec path and rejects a brief fails, because no test author run starts on the connected spec
-
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › or a specific spec. the arguments and commands are free for the implementor
-
-Unanswered: Q-44
-
-### AC-003: Direct start accepts a specific spec
-
-- **Given** The same project as in AC-001, with a final spec
-- **When** The user starts the test agent directly as a single step and names that spec
-- **Then** A test author run starts on that spec, and the run folder's recorded inputs contain criteria of that spec
+- **Given** A project with a final spec that has at least one criterion proven by test
+- **When** The user starts the test author directly as a single step and names that spec
+- **Then** A test author run starts for that spec, and the inputs recorded in its run folder contain that spec's criteria
 
 Proven by: acceptance test
 
-Rejects: A single-step command that accepts only a brief fails, because no test author run starts when a spec is named
+Rejects: A single-step command that always picks the most recent spec, whatever spec is named, fails when the named spec is not the most recent one, because the recorded inputs hold another spec's criteria
 
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › or a specific spec. the arguments and commands are free for the implementor
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › the brief (which is "connected" to a spec) or a specific spec
 
-### AC-004: Direct start on a spec that is not final stops with a message
+### AC-004: Starting on a spec that is not final stops
 
-- **Given** A spec that is not final yet
-- **When** The user starts the test agent directly on that spec
-- **Then** The process stops, the user is shown a message, and no acceptance test file, review file or lock is written for that spec
+- **Given** A project with a spec that still has open questions without answers, so it is not final
+- **When** The user starts the test author directly on that spec
+- **Then** The process stops with a message, no test author run starts, and no acceptance test, review file, assumptions.md or lock is written for that spec
 
 Proven by: acceptance test
 
-Rejects: An implementation that runs the test author on a draft spec fails, because acceptance test files appear for that spec
+Rejects: An implementation that runs the test author on any existing spec.md fails, because acceptance tests appear for a spec that is not final
 
 Sources: `specs/002-test-author-acceptance-tests/answers.md` › the process should stop and the user is presented a message
 
-Unanswered: Q-41
+### AC-005: Starting on a spec that does not exist stops
 
-### AC-005: Direct start on a spec that does not exist stops with a message
-
-- **Given** A spec reference, or a brief with no connected spec, that names no existing spec
-- **When** The user starts the test agent directly with it
-- **Then** The process stops, the user is shown a message, and no acceptance test file, review file or lock is written
+- **Given** A project in which the named spec does not exist
+- **When** The user starts the test author directly on that spec
+- **Then** The process stops with a message and no test author run starts
 
 Proven by: acceptance test
 
-Rejects: An implementation that crashes with an unhandled error, or that creates an empty test folder, fails: in the first case no message is shown, in the second files are written
+Rejects: An implementation that crashes with an unhandled error, or starts a run with an empty spec, fails, because it shows no message or starts a run
 
 Sources: `specs/002-test-author-acceptance-tests/answers.md` › the process should stop and the user is presented a message
-
-Unanswered: Q-41, Q-44
 
 ### AC-006: Missing implementation or plan paths in the contract stop the run
 
-- **Given** A final spec in a project whose .doppelblind.conf declares no paths for implementation code and no paths for the plan
+- **Given** A project whose .doppelblind.conf declares no paths for implementation code and the plan, with a final spec that has a criterion proven by test
 - **When** The user starts the test author on that spec
-- **Then** The run stops with a message, and no acceptance test file, review file or lock is written
+- **Then** The run stops with a message before the test author starts, and no acceptance test is written
 
 Proven by: acceptance test
 
-Rejects: An implementation that runs the test author with full repository access when no paths are declared fails, because acceptance tests get written
+Rejects: An implementation that assumes everything outside the test path is visible when no paths are declared fails, because the test author starts
 
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › which paths hold implementation code and which hold the plan
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › the project declares in `.doppelblind.conf` which paths hold implementation code and which hold the plan
 
-Unanswered: Q-41, Q-42
+### AC-007: Implementation code and plan are absent from what the test author can access
 
-### AC-007: Missing test author path in the contract stops the run
+Why: A check counts only if it does not correlate with the error it is meant to find.
 
-- **Given** A final spec in a project whose .doppelblind.conf declares no path for the test author
-- **When** The user starts the test author on that spec
-- **Then** The run stops with a message, and no acceptance test file is written anywhere in the project
-
-Proven by: acceptance test
-
-Rejects: An implementation that falls back to a built-in default test directory fails, because acceptance test files appear in the project
-
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › the acceptance tests are written to the path the contract in
-
-Unanswered: Q-41, Q-42
-
-### AC-008: A project without tests stops the run
-
-- **Given** A final spec in a project with a complete contract but no tests at all
-- **When** The user starts the test author on that spec
-- **Then** The run stops with a message, and no acceptance test file is written
+- **Given** A project whose .doppelblind.conf declares an implementation path and a plan path, each holding a file, and a final spec with a criterion proven by test
+- **When** A test author run takes place and the agent in it tries to read each of those files
+- **Then** Neither file exists in what the test author can access: both reads fail, and neither file's content appears in the inputs recorded in the run folder
 
 Proven by: acceptance test
 
-Rejects: An implementation that picks a test framework on its own and writes tests fails, because acceptance test files appear
+Rejects: An implementation that only tells the test author in its prompt not to read the implementation, while the files stay in its checkout, fails, because the read of the implementation file succeeds
 
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › if the project has no tests yet, the run stops with a message
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › these paths are absent from what the test author can access; `docs/product.md` › a check counts only if it does not correlate with the error it is meant to find
 
-Unanswered: Q-41
+### AC-008: The test author gets only ID, Given, When and Then of criteria proven by test
 
-### AC-009: A spec without criteria proven by test stops before the test author starts
-
-- **Given** A final spec in which every criterion is proven by review
-- **When** The user starts the test author on that spec
-- **Then** The process stops before the test author starts, the user sees a message that the spec has no criterion proven by test, and no file in the project is created or changed
+- **Given** A final spec with one criterion proven by test, one criterion proven by review, an introduction, a wish and an open question, each with distinct marker text
+- **When** A test author run takes place
+- **Then** The inputs recorded in the run folder contain the ID, Given, When and Then of the criterion proven by test. They contain none of the following: the criterion proven by review, the introduction, the criterion's reason, its rejects, the wish, the open question
 
 Proven by: acceptance test
 
-Rejects: An implementation that still writes a review file, or that starts the agent and leaves a run folder behind, fails, because a file in the project is created
+Rejects: An implementation that passes the whole spec.md to the test author fails, because the introduction's and the review criterion's marker text appear in the recorded inputs
 
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › the process stops before the test author starts, and the user sees a message that the spec has no criterion proven by test. nothing is written to the project.
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › The test author sees only the criteria of the final spec whose `proven_by` is `test`: ID, Given, When, Then.; `specs/002-test-author-acceptance-tests/answers.md` › It does not see the introduction, `why`, `rejects`, wishes or open questions.
 
-Unanswered: Q-41
+Unanswered: Q-31, Q-34
 
-### AC-010: Locked earlier acceptance tests stop a new run
+### AC-009: The test author does not see the brief, sources, other answers, other specs or run records
 
-- **Given** A final spec whose acceptance tests were locked by an earlier test author run
-- **When** The user starts the test author on that spec
-- **Then** The process stops before the test author starts, the user sees a message that the tests of this spec are frozen, and the existing acceptance test files and review file are unchanged
-
-Proven by: acceptance test
-
-Rejects: An implementation that overwrites locked tests fails, because the existing acceptance test files change
-
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › the user sees a message that the tests of this spec are frozen
-
-Unanswered: Q-27, Q-28, Q-41
-
-### AC-011: Unlocked earlier acceptance tests are replaced by a new run
-
-- **Given** A final spec with acceptance tests and a review file from an earlier run that were never locked, including one acceptance test file the new run does not produce
-- **When** The user starts the test author on that spec and the run completes
-- **Then** The spec's acceptance tests and review file are exactly those of the new run; the earlier file the new run did not produce no longer exists
+- **Given** A project with a brief, a binding source, answers marked unanswered and out of scope, a second spec and an earlier run folder in .doppelblind, each with distinct marker text, plus a final spec with a criterion proven by test
+- **When** A test author run takes place and the agent in it tries to read each of those files
+- **Then** None of those files can be read by the test author, and none of their marker text appears in the inputs recorded in the run folder
 
 Proven by: acceptance test
 
-Rejects: An implementation that adds new files next to the old ones without removing them fails, because the earlier file is still there
-
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › its files replace the earlier acceptance tests and review file of that spec
-
-Unanswered: Q-40
-
-### AC-012: Implementation and plan paths are absent from the test author's access
-
-Why: OUT-02 asks for acceptance tests from an agent that never saw the implementation.
-
-- **Given** A project whose .doppelblind.conf declares implementation and plan paths that contain files
-- **When** A test author run executes
-- **Then** No file under the declared implementation or plan paths can be read from the environment the test author runs in
-
-Proven by: acceptance test
-
-Rejects: An implementation that only tells the agent in its prompt not to read those paths, while they stay present in its checkout, fails, because those files can be read from the test author's environment
-
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › these paths are absent from what the test author can access; `docs/product.md` › get acceptance tests from an agent that never saw the implementation
-
-Unanswered: Q-42
-
-### AC-013: The test author receives only ID, Given, When and Then of criteria proven by test
-
-- **Given** A final spec with an introduction, wishes, open questions, a criterion proven by test and a criterion proven by review, each with title, reason, rejects, Given, When and Then
-- **When** A test author run executes
-- **Then** The spec content the test author receives, as recorded in the run folder's inputs, contains the ID, Given, When and Then of the criterion proven by test, and contains none of: the criterion proven by review, any title, reason, rejects, the introduction, the wishes or the open questions
-
-Proven by: acceptance test
-
-Rejects: An implementation that hands over the whole spec file fails, because the recorded inputs contain the introduction and the review criterion
-
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › The test author sees only the criteria of the final spec whose; `specs/002-test-author-acceptance-tests/answers.md` › It does not see the introduction
-
-Unanswered: Q-39
-
-### AC-014: Brief, sources, answers, unit tests, other specs and run records are absent from the test author's access
-
-- **Given** A project containing the brief, binding sources, an answers file, unit tests, another spec and earlier run records in .doppelblind
-- **When** A test author run executes
-- **Then** None of these files can be read from the environment the test author runs in
-
-Proven by: acceptance test
-
-Rejects: An implementation that hides only the implementation and plan paths and leaves the rest of the repository visible fails, because the brief can be read from the test author's environment
+Rejects: An implementation that hides only the implementation and plan paths, but leaves the brief and docs in the checkout, fails, because the brief can be read
 
 Sources: `specs/002-test-author-acceptance-tests/answers.md` › It does not see the brief, the binding sources
 
-Unanswered: Q-38
+Unanswered: Q-31, Q-32
 
-### AC-015: Existing acceptance tests and test infrastructure are visible to the test author
+### AC-010: Decisions answered free are handed over as deliberately unspecified
 
-- **Given** A project with existing acceptance tests and test fixtures, helpers and stubs
-- **When** A test author run executes
-- **Then** The existing acceptance tests and the test fixtures, helpers and stubs can be read from the environment the test author runs in
-
-Proven by: acceptance test
-
-Rejects: An implementation that hides all tests from the test author fails, because the fixtures cannot be read from its environment
-
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › It also sees the existing acceptance tests and the test infrastructure (fixtures, helpers, stubs), read-only
-
-Unanswered: Q-38, Q-40
-
-### AC-016: Decisions answered free are handed over per affected criterion
-
-- **Given** A final spec with an open question answered free whose concerns list one criterion proven by test, and another criterion proven by test that the question does not concern
-- **When** A test author run executes
-- **Then** In the recorded inputs, the concerned criterion carries a note starting with "deliberately unspecified:"; the other criterion carries none; and the text of the open question is not handed over as an open question
+- **Given** A final spec with a criterion proven by test, and an open question about that criterion answered `free`
+- **When** A test author run takes place
+- **Then** The inputs recorded in the run folder contain, for that criterion, an entry starting with "deliberately unspecified:" naming the aspect, and do not contain the answer `free` as an answer
 
 Proven by: acceptance test
 
-Rejects: An implementation that drops free answers entirely fails, because the concerned criterion carries no "deliberately unspecified:" note
+Rejects: An implementation that drops free answers entirely fails, because the recorded inputs hold no "deliberately unspecified:" entry for the criterion
 
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › deliberately unspecified: <aspect>
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › Decisions answered `free` are handed over per affected criterion as "deliberately unspecified: <aspect>"
 
-Unanswered: Q-37
+Unanswered: Q-35
 
-### AC-017: Acceptance tests are written to the contract's test author path
+### AC-011: Missing test author path in the contract stops the run
 
-- **Given** A project whose .doppelblind.conf declares a path for the test author
-- **When** A test author run completes
-- **Then** Every acceptance test file the run produced lies under the declared path
+- **Given** A project whose .doppelblind.conf declares no path for the test author, with a final spec that has a criterion proven by test
+- **When** The user starts the test author on that spec
+- **Then** The run stops with a message and no acceptance test is written
 
 Proven by: acceptance test
 
-Rejects: An implementation that writes tests to a fixed directory regardless of the contract fails, because the produced files lie outside the declared path
+Rejects: An implementation that falls back to a fixed tests folder fails, because acceptance tests are written
 
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › the acceptance tests are written to the path the contract in
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › the acceptance tests are written to the path the contract in `.doppelblind.conf` declares for the test author
 
-Unanswered: Q-42
+### AC-012: Acceptance tests are written to the declared test author path
 
-### AC-018: A write outside the allowed path is rejected and fails the run
+- **Given** A project whose .doppelblind.conf declares a test author path, with a final spec that has a criterion proven by test
+- **When** A test author run ends successfully
+- **Then** The generated acceptance test files lie under the declared test author path, and no file outside it was created or changed by the run, except files the orchestrator writes (assumptions.md, the lock, the run folder)
 
-- **Given** A test author run in which the agent attempts to write a file outside the path the contract declares for the test author
+Proven by: acceptance test
+
+Rejects: An implementation that writes the tests next to the spec in the specs folder fails, because the test files are not under the declared path
+
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › the acceptance tests are written to the path the contract in `.doppelblind.conf` declares for the test author
+
+### AC-013: A write outside the test author path is rejected
+
+- **Given** A test author run in which the agent tries to write a file outside the declared test author path
 - **When** The run processes that write
-- **Then** The file does not exist outside the allowed path afterwards, the run fails, and the message names the rejected path
+- **Then** The file does not exist outside the declared path afterwards, the run fails, and the message names the rejected path
 
 Proven by: acceptance test
 
-Rejects: An implementation that lets the write through and only warns afterwards fails, because the file exists outside the allowed path
+Rejects: An implementation that only logs a warning for writes outside the path fails, because the file stays and the run does not fail
 
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › every write of the test author outside that path is rejected, and the run fails with a message naming the rejected path.
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › every write of the test author outside that path is rejected, and the run fails with a message naming the rejected path
 
-Unanswered: Q-40, Q-41
+### AC-014: Reaching the time or cost limit asks the user whether to raise it
 
-### AC-019: Time, cost and turn limits can be set when starting
-
-Why: Product invariant 4 bounds every agent run by time and cost and lets the user set those limits at the start of a run.
-
-- **Given** A final spec ready for the test author
-- **When** The user starts the test author command with options that set a time limit, a cost limit and a turn limit
-- **Then** The run uses the given values, and the run folder's guardrails record them
+- **Given** A test author run started with an option that sets a time limit (or cost limit) the run exceeds
+- **When** The run reaches that limit
+- **Then** The user is asked whether to raise the limit and retry
 
 Proven by: acceptance test
 
-Rejects: An implementation that ignores the options and always uses defaults fails, because the recorded guardrails show the default values
+Rejects: An implementation that ignores the option and uses only the default limit fails, because the run does not reach the low limit and the user is never asked
 
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › the user can change them with options when starting the command; `docs/product.md` › Every agent run is bounded by time and cost
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › the user can change them with options when starting the command; `specs/002-test-author-acceptance-tests/answers.md` › when the time or cost limit is reached, the user is asked whether to raise it and retry; the turn limit is never raised
 
-Unanswered: Q-31
+### AC-015: Declining to raise a limit stops without writing results
 
-### AC-020: Reaching the time or cost limit asks whether to raise it and retry
-
-Why: Product invariant 4 says a human decides at a limit and nothing is approved automatically by waiting.
-
-- **Given** A test author run with a time limit (or a cost limit) the run reaches
-- **When** The limit is reached
-- **Then** The user is asked whether to raise that limit and retry, and the run does not continue until the user answers
-
-Proven by: acceptance test
-
-Rejects: An implementation that silently retries with a higher limit fails, because the user is never asked
-
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › the user is asked whether to raise it and retry; the turn limit is never raised; `docs/product.md` › At a limit, a human decides
-
-Unanswered: Q-32
-
-### AC-021: The turn limit is never offered for raising
-
-- **Given** A test author run with a turn limit the run reaches
-- **When** The turn limit is reached
-- **Then** The user is not asked whether to raise the turn limit, and the run does not continue with more turns
-
-Proven by: acceptance test
-
-Rejects: An implementation that treats all three limits alike fails, because it asks whether to raise the turn limit
-
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › the user is asked whether to raise it and retry; the turn limit is never raised
-
-Unanswered: Q-30
-
-### AC-022: Declining to raise a limit stops the process with a message
-
-- **Given** A test author run that reached its time or cost limit, and the user is asked whether to raise it
+- **Given** A test author run that has reached its time or cost limit, with the user asked whether to raise it
 - **When** The user declines
-- **Then** The process stops and shows a message
+- **Then** The process stops with a message, and the project holds none of these for the spec: acceptance tests, review file, assumptions.md, lock
 
 Proven by: acceptance test
 
-Rejects: An implementation that keeps going after the user declines fails, because the process does not stop
+Rejects: An implementation that keeps the partial test files written before the limit was reached fails, because acceptance test files remain in the project
 
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › if the user declines, the process stops with a message
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › if the user declines, the process stops with a message and nothing of the run is written to the project
 
-Unanswered: Q-29, Q-41
+Unanswered: Q-36
 
-### AC-023: Each test author run keeps its own run folder in .doppelblind
+### AC-016: The turn limit is never raised
 
-Why: Product invariant 6 records every run's state, logs and role input and output for later analysis.
-
-- **Given** A project in which a spec agent run has already been recorded in .doppelblind
-- **When** A test author run executes
-- **Then** A new folder for this run exists in .doppelblind that holds the agent's inputs, guardrails and run log, laid out the same way as the spec agent run's folder
+- **Given** A test author run started with an option that sets a turn limit the run exceeds
+- **When** The run reaches the turn limit
+- **Then** The user is not asked whether to raise it, the process stops, and the TUI shows the reason
 
 Proven by: acceptance test
 
-Rejects: An implementation that appends the test author's log to the spec agent's folder fails, because no separate folder exists for this run
+Rejects: An implementation that treats the turn limit like the time limit and offers to raise it fails, because the user is asked
 
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › laid out the same way as a spec agent run; `docs/product.md` › for later analysis
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › when the time or cost limit is reached, the user is asked whether to raise it and retry; the turn limit is never raised; `specs/002-test-author-acceptance-tests/answers.md` › the process stops and the TUI shows the reason
 
-### AC-024: The run folder is kept when the run fails
+### AC-017: Each test author run keeps its own run folder
 
-- **Given** A test author run that fails (for example through a rejected write as in AC-018)
+Why: Every run records its state, logs and the input and output of every role for later analysis.
+
+- **Given** A project with an earlier spec agent run folder in .doppelblind
+- **When** Two test author runs take place one after the other
+- **Then** Each has its own folder in .doppelblind with its inputs, guardrails and run log, laid out the same way as the spec agent run folder
+
+Proven by: acceptance test
+
+Rejects: An implementation that overwrites a single test author folder on every run fails, because only one folder remains after two runs
+
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › each test author run keeps its own folder in `.doppelblind`; `docs/product.md` › for later analysis
+
+### AC-018: The run folder is kept when the run fails
+
+- **Given** A test author run that fails because of a write outside the declared path
 - **When** The process has stopped
-- **Then** The run's folder in .doppelblind still exists with its inputs, guardrails and run log
+- **Then** The run folder of that run still exists in .doppelblind with its inputs, guardrails and run log
 
 Proven by: acceptance test
 
-Rejects: An implementation that cleans up the run folder on failure fails, because the folder no longer exists
+Rejects: An implementation that cleans up the run folder on failure fails, because the folder is gone
 
 Sources: `specs/002-test-author-acceptance-tests/answers.md` › the folder is kept when the run fails
 
-Unanswered: Q-29
+Unanswered: Q-36
 
-### AC-025: The TUI shows one line per step
+### AC-019: The TUI shows one line per step
 
-- **Given** A test author run that completes
-- **When** The user watches the TUI
-- **Then** The TUI shows one line for each of these steps: reading the final spec, preparing what the test author may see, the test author writing the acceptance tests, validating its output, checking its writes, and writing the lock
+- **Given** A final spec with a criterion proven by test
+- **When** A test author run ends successfully
+- **Then** The TUI output has one line for each of these steps: reading the final spec, preparing what the test author may see, the test author writing the acceptance tests, validating its output, checking its writes, writing the lock
 
 Proven by: acceptance test
 
-Rejects: An implementation that shows only a spinner until the end fails, because the step lines are missing
+Rejects: An implementation that shows only a single spinner for the whole run fails, because there are no separate step lines
 
 Sources: `specs/002-test-author-acceptance-tests/answers.md` › the TUI shows one line per step; `docs/briefs/test-agent.md` › Die TUI zeigt mir, was gerade passiert.
 
-Unanswered: Q-27
+### AC-020: Step lines show elapsed time, done or failed
 
-### AC-026: Step lines show elapsed time, done or failed
-
-- **Given** A test author run in which one step is running, earlier steps have finished, and a later step fails
-- **When** The user watches the TUI
-- **Then** The running step's line shows how long it has been running; each finished step is marked done with a short detail; the failed step is marked failed and followed by the reason
+- **Given** A test author run whose agent step runs for several seconds and then makes a write outside the declared path
+- **When** The TUI output is captured during and after the run
+- **Then** While the agent step runs, its line shows how long it has been running. The steps finished before it are marked done with a short detail. The failing step is marked failed and followed by the reason
 
 Proven by: acceptance test
 
-Rejects: An implementation that marks a failed step the same way as a finished one fails, because the step is not marked failed and has no reason after it
+Rejects: An implementation that marks every step done and prints the error only in the log fails, because the failing step is not marked failed and no reason follows it
 
 Sources: `specs/002-test-author-acceptance-tests/answers.md` › the running step shows how long it has been running
 
-### AC-027: The orchestrator's own test run reports a test that passes before implementation
+Unanswered: Q-44
 
-Why: Product invariant 2 says no agent's account of its own work counts as evidence; signals come from systems.
+### AC-021: Assumptions are written to assumptions.md next to spec.md
 
-- **Given** A test author run whose generated acceptance tests include one test, carrying a known criterion ID, that passes against the current main state, while the agent reports all tests as failing
-- **When** The orchestrator checks the generated tests with its own test run
-- **Then** That test is reported to the user with its criterion ID
-
-Proven by: acceptance test
-
-Rejects: An implementation that trusts the agent's report and skips its own test run fails, because the passing test is not reported
-
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › A test that passes before any implementation is reported with its criterion ID; `specs/002-test-author-acceptance-tests/answers.md` › The orchestrator checks this with its own test run; the test author's report does not count.; `docs/product.md` › no agent's account of its own work counts as evidence
-
-Unanswered: Q-33, Q-34, Q-35, Q-36
-
-### AC-028: Review file location and structure
-
-Why: The review file lies next to the acceptance tests so that it gets the same protection: read-only for the implementer, frozen by hash, checked by CI.
-
-- **Given** A final spec in folder <spec folder> with two criteria proven by review and at least one proven by test
-- **When** A test author run completes
-- **Then** The file tests/acceptance/<spec folder>/review.md exists, is Markdown, and has exactly one section per criterion proven by review, each headed by that criterion's ID
+- **Given** A test author run in which the agent reports two assumptions
+- **When** The run ends
+- **Then** assumptions.md is in the spec's folder next to spec.md, with two sections headed A-001 and A-002. Each section states the criterion, the assumption phrased as a question, a kind from gap, ambiguous, not measurable or contradiction, and the test files that rely on it. Each has an empty **Decision:** field
 
 Proven by: acceptance test
 
-Rejects: An implementation that writes the review file into the spec folder, or puts both criteria into one section, fails, because the file is not at the given path or the section count is wrong
+Rejects: An implementation that writes the assumptions only into the run folder fails, because no assumptions.md exists next to spec.md
 
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › tests/acceptance/<spec folder>/review.md; `specs/002-test-author-acceptance-tests/answers.md` › It is Markdown with one section per criterion proven by review
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › The orchestrator writes the assumptions to `assumptions.md` in the spec's folder, next to `spec.md`.
 
-Unanswered: Q-28
+Unanswered: Q-42
 
-### AC-029: Each review entry is usable for checking its criterion
+### AC-022: Final TUI output shows the number of assumptions and their path
 
-- **Given** A review file produced for a spec with criteria proven by review
-- **When** The user reads an entry
-- **Then** The entry holds the criterion's title and its Given, When and Then; the steps that bring the project into the Given state and carry out the When; where to check (command, file or screen state); and what must be observed for the criterion to hold
+- **Given** A test author run in which the agent reports two assumptions with distinct question texts
+- **When** The run ends
+- **Then** The TUI's final output shows the number 2 and the path of assumptions.md, and does not show either assumption's question text
+
+Proven by: acceptance test
+
+Rejects: An implementation that prints every assumption in the TUI fails, because the question texts appear in the output
+
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › At the end of the run the TUI shows the number of assumptions and the path of `assumptions.md`
+
+Unanswered: Q-42
+
+### AC-023: No lock while an assumption lacks a valid decision
+
+- **Given** A spec whose assumptions.md has one assumption with an empty **Decision:** field and one whose decision is text other than `accepted` or `rejected: <own text>`
+- **When** The test author step reaches its end
+- **Then** No lock is written for that spec's acceptance tests
+
+Proven by: acceptance test
+
+Rejects: An implementation that writes the lock right after the agent finishes, regardless of assumptions, fails, because a lock exists
+
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › The acceptance tests are frozen only when every assumption has a valid decision.; `specs/002-test-author-acceptance-tests/answers.md` › A valid decision is `accepted` or `rejected: <own text>`
+
+Unanswered: Q-27, Q-28
+
+### AC-024: Review file has one section per review criterion
+
+Why: Next to the acceptance tests, the review file gets the same protection: read-only for the implementer, frozen by hash, checked by CI.
+
+- **Given** A final spec in folder <spec folder> with two criteria proven by review and one proven by test
+- **When** A test author run ends successfully
+- **Then** tests/acceptance/<spec folder>/review.md exists and is Markdown with exactly two criterion sections, headed by the IDs of the two review criteria, and no section for the criterion proven by test
+
+Proven by: acceptance test
+
+Rejects: An implementation that writes review.md into the spec folder, or adds a section for every criterion, fails because of the path or the extra section
+
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › `tests/acceptance/<spec folder>/review.md`; `specs/002-test-author-acceptance-tests/answers.md` › so it gets the same protection
+
+### AC-025: Each review entry lets the user check its criterion
+
+- **Given** A review.md produced for a spec with criteria proven by review
+- **When** The user reads each section
+- **Then** Each section holds the criterion's title and its Given, When and Then. It also holds the steps that bring the project into the Given state and carry out the When, where to check (a command, a file or a screen state), and what must be observed for the criterion to hold. It holds no results
 
 Proven by: review
 
-Rejects: An entry that only repeats the criterion's Then without setup steps or a place to check is spotted in review by the missing setup steps and missing place to check
+Rejects: A review file that only repeats each criterion's Given-When-Then, without steps or where to check, is spotted in review by the missing steps and missing place to check
 
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › each entry holds the criterion's title and its Given, When and Then; `docs/briefs/test-agent.md` › eine Datei, die für den Menschen nützlich ist, um die Review-Kriterien einzeln zu prüfen
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › each entry holds the criterion's title and its Given, When and Then; `specs/002-test-author-acceptance-tests/answers.md` › It holds no results; `docs/briefs/test-agent.md` › die für den Menschen nützlich ist, um die Review-Kriterien einzeln zu prüfen
 
-### AC-030: The review file holds no results
+### AC-026: No review criterion means no review file
 
-Why: The reviewer's decision is recorded in the PR review and the run record, not in this file.
-
-- **Given** A review file produced by a test author run
-- **When** The user reads it
-- **Then** It contains no place for or record of a review result, such as a checkbox, a pass/fail field or a verdict
-
-Proven by: review
-
-Rejects: A review file with a "Result: [ ]" line under each entry is spotted in review by that result field
-
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › It holds no results; `specs/002-test-author-acceptance-tests/answers.md` › the reviewer's decision is recorded in the PR review and the run record, not in this file
-
-### AC-031: No review file when the spec has no criterion proven by review
-
-- **Given** A final spec whose criteria are all proven by test
-- **When** A test author run completes
-- **Then** No file tests/acceptance/<spec folder>/review.md exists, and the TUI's final output says that the spec has no criterion proven by review
+- **Given** A final spec with criteria proven by test and none proven by review
+- **When** A test author run ends successfully
+- **Then** No review.md exists under tests/acceptance/<spec folder>, and the TUI's final output says the spec has no criterion proven by review
 
 Proven by: acceptance test
 
@@ -444,81 +346,141 @@ Rejects: An implementation that writes an empty review.md fails, because the fil
 
 Sources: `specs/002-test-author-acceptance-tests/answers.md` › no review file is written, and the TUI's final output says that the spec has no criterion proven by review.
 
-### AC-032: The final output names what the agent produced
+### AC-027: No test criterion stops before the test author
 
-- **Given** A test author run that produced acceptance test files and a review file
-- **When** The run ends
-- **Then** The TUI's final output names each acceptance test file and the review file the run produced
-
-Proven by: acceptance test
-
-Rejects: An implementation that ends with only "done" fails, because the produced files are not named
-
-Sources: `docs/briefs/test-agent.md` › Die TUI beendet den Lauf mit der Information, was der Agent erzeugt hat.
-
-### AC-033: A failed run leaves its files incomplete and unlocked
-
-- **Given** A test author run that has written some acceptance test files and then fails
-- **When** The process has stopped
-- **Then** The TUI shows the reason; the files already written still exist and are listed as incomplete; and starting the test author on the same spec again does not stop with the message that the tests are frozen
+- **Given** A final spec whose criteria are all proven by review
+- **When** The user starts the test author on it
+- **Then** The process stops before the test author starts, the user sees a message that the spec has no criterion proven by test, and nothing is written to the project
 
 Proven by: acceptance test
 
-Rejects: An implementation that writes the lock before the run has finished fails, because the second start stops with the frozen message
+Rejects: An implementation that starts the agent with an empty criteria list fails, because a test author run starts and writes to the project
 
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › files the test author already wrote stay in the project and are listed as incomplete; no lock is written, so they are not frozen.
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › the process stops before the test author starts, and the user sees a message that the spec has no criterion proven by test
 
-Unanswered: Q-27, Q-29, Q-33
+### AC-028: A run that fails partway leaves incomplete, unlocked files
 
-### AC-034: One criterion per test, at least one test per criterion proven by test
+- **Given** A test author run in which the agent has written one acceptance test file and then the run fails
+- **When** The process stops
+- **Then** The TUI shows the reason. The written test file stays in the project and is listed as incomplete. No lock is written
 
-- **Given** The acceptance tests produced for a final spec
-- **When** The user reviews them
-- **Then** Each acceptance test carries exactly one criterion ID; every criterion proven by test has at least one acceptance test; and shared setup sits in fixtures or helpers, not in a test that serves several criteria
+Proven by: acceptance test
+
+Rejects: An implementation that writes the lock for whatever files exist when the run fails fails, because a lock exists
+
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › files the test author already wrote stay in the project and are listed as incomplete
+
+### AC-029: Locked earlier tests stop a new run
+
+- **Given** A spec whose acceptance tests from an earlier run are locked
+- **When** The user starts the test author on that spec
+- **Then** The process stops before the test author starts, the user sees a message that the tests of this spec are frozen, and the locked test files are unchanged
+
+Proven by: acceptance test
+
+Rejects: An implementation that overwrites the earlier tests regardless of the lock fails, because the locked files change
+
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › if the earlier acceptance tests are locked, the process stops before the test author starts
+
+Unanswered: Q-29
+
+### AC-030: Unlocked earlier tests are replaced
+
+- **Given** A spec with unlocked acceptance test files and a review.md from an earlier run, each with distinct marker text
+- **When** A new test author run on that spec ends successfully
+- **Then** The earlier acceptance test files and review file are replaced by the new run's files: none of the earlier marker text remains under the spec's acceptance test path
+
+Proven by: acceptance test
+
+Rejects: An implementation that adds new files next to the earlier ones and keeps them fails, because the earlier marker text remains
+
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › if they are not locked, the new run starts from scratch
+
+Unanswered: Q-30
+
+### AC-031: A project without tests stops the run
+
+- **Given** A project fulfilling the contract with no tests at all, and a final spec with a criterion proven by test
+- **When** The user starts the test author on that spec
+- **Then** The run stops with a message and no acceptance test is written
+
+Proven by: acceptance test
+
+Rejects: An implementation that picks a default test framework when none is present fails, because acceptance tests are written
+
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › if the project has no tests yet, the run stops with a message
+
+Unanswered: Q-32, Q-33
+
+### AC-032: Acceptance tests use the project's test language and framework
+
+- **Given** A project whose existing tests use one language and test framework
+- **When** A test author run ends successfully and the user looks at the generated acceptance tests
+- **Then** The generated tests are written in that language and with that test framework, and use the project's existing test infrastructure
 
 Proven by: review
 
-Rejects: A single test that checks AC-001 and AC-002 together is spotted in review by the test carrying two criterion IDs
-
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › Each acceptance test covers exactly one criterion and carries exactly one criterion ID; `specs/002-test-author-acceptance-tests/answers.md` › Every criterion proven by test has at least one acceptance test.
-
-### AC-035: Tests use the project's existing language and test framework
-
-- **Given** A project whose existing tests use one language and one test framework
-- **When** The user reviews the generated acceptance tests
-- **Then** They are written in that language and with that test framework
-
-Proven by: review
-
-Rejects: Tests written with another framework than the project's existing tests are spotted in review by their imports and syntax
+Rejects: A test author that writes tests in a framework the project does not use is spotted in review by a different framework in the generated test files
 
 Sources: `specs/002-test-author-acceptance-tests/answers.md` › the test author writes the acceptance tests in the language and with the test framework the project's existing tests and test infrastructure use
 
-### AC-036: No test fixes an aspect answered free
+Unanswered: Q-32
 
-- **Given** A criterion handed over with a "deliberately unspecified:" aspect
-- **When** The user reviews that criterion's acceptance tests
-- **Then** No test asserts a specific value or behaviour for that aspect
+### AC-033: A test that passes before implementation is reported with its criterion ID
 
-Proven by: review
+Why: No agent's account of its own work counts as evidence; signals are produced by systems.
 
-Rejects: A test that asserts an exact message text when the message text was answered free is spotted in review by that assertion
+- **Given** A project in which the behaviour of one criterion proven by test already exists on the current main state
+- **When** A test author run ends and the orchestrator runs the generated acceptance tests itself
+- **Then** The user is shown the criterion ID of the test that passes
 
-Sources: `specs/002-test-author-acceptance-tests/answers.md` › no test may fix that aspect, and the test author reports no assumption for it
+Proven by: acceptance test
 
-### AC-037: Agent output is in English
+Rejects: An implementation that trusts the agent's report that all tests fail, and does not run them itself, fails, because the passing test's criterion ID is never shown
+
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › A test that passes before any implementation is reported with its criterion ID; `docs/product.md` › no agent's account of its own work counts as evidence
+
+Unanswered: Q-28, Q-37, Q-38, Q-39, Q-40
+
+### AC-034: Each acceptance test carries exactly one criterion ID, and each test criterion has a test
+
+- **Given** A final spec with three criteria proven by test
+- **When** A test author run ends successfully
+- **Then** Each generated acceptance test names exactly one criterion ID in the way the contract declares for naming a test's criterion. Each of the three criterion IDs is named by at least one test
+
+Proven by: acceptance test
+
+Rejects: A run that produces one combined test naming all three IDs fails, because that test names more than one criterion ID
+
+Sources: `specs/002-test-author-acceptance-tests/answers.md` › Each acceptance test covers exactly one criterion and carries exactly one criterion ID; `specs/002-test-author-acceptance-tests/answers.md` › Every criterion proven by test has at least one acceptance test.; `docs/product.md` › how a test names the criterion it checks
+
+Unanswered: Q-41
+
+### AC-035: Final TUI output lists what the agent produced
+
+- **Given** A final spec with criteria proven by test and by review
+- **When** A test author run ends successfully
+- **Then** The TUI's final output names the generated acceptance test files and the path of review.md
+
+Proven by: acceptance test
+
+Rejects: An implementation that ends with only "done" fails, because the generated files are not named
+
+Sources: `docs/briefs/test-agent.md` › Die TUI beendet den Lauf mit der Information, was der Agent erzeugt hat.
+
+### AC-036: Generated files are in English
 
 Why: Otherwise a spec mixes German and English.
 
-- **Given** A brief written in German whose spec is final
-- **When** The user reviews the review file and the acceptance tests produced
-- **Then** The review file's text and the tests' descriptions are in English
+- **Given** A German brief whose final spec has criteria proven by test and by review
+- **When** A test author run ends and the user reads assumptions.md, review.md and the generated tests
+- **Then** All text the agents produced in those files is in English
 
 Proven by: review
 
-Rejects: A review file written in German is spotted in review by its German text
+Rejects: A test author that writes German review steps for a German brief is spotted in review by the German text in review.md
 
-Sources: `docs/decisions.md` › DEC-005: Agents write their output in English
+Sources: `docs/decisions.md` › All agent output is in English, regardless of the brief's language.; `docs/decisions.md` › Otherwise a spec mixes German and English.
 
 ## Wishes
 
@@ -528,7 +490,6 @@ None.
 
 - Q-01: Step 3 says the test author 'can' write an end-to-end list that walks through existing criteria so one review covers several of them. Under which conditions does it produce this list, and what must the list contain?
 - Q-11: Product invariant 3 (structured output is validated against its schema, and invalid output is a failure) holds only from the outcome that introduces it. Does it apply to the test author in this change, and if so, what does the user see when the output is invalid?
-- Q-15: Where and in what form are the test author's assumptions recorded, and does the user see them in the TUI at the end of the run?
 - Q-16: What must the TUI's final output contain besides the files the agent produced?
 
 ## Out of scope
@@ -537,24 +498,24 @@ None.
 
 ## Unanswered
 
-- Q-27: The lock is the last step 'when everything is fine for the user'. How does the user say that everything is fine, and what happens to the run if the user does not say so?
-- Q-28: What do the lock and the test inventory contain, where are they stored in the project, and what exactly do they cover (acceptance tests, the review file, test infrastructure)?
-- Q-29: When the user declines to raise a limit, nothing of the run may be written to the project. But the run folder lives in the project's .doppelblind folder and is kept when a run fails, and files the test author already wrote stay in the project when a run is aborted. Which of these is kept, and which is removed, when the user declines?
-- Q-30: What happens when the test author run reaches its turn limit: what does the user see, and what happens to files already written?
-- Q-31: What are the default values of the time, cost and turn limits of the test author run?
-- Q-32: When the user agrees to raise a time or cost limit, how does the user give the new value, and does the retry continue the run or start it over?
-- Q-33: What happens when the orchestrator's own test run finds a generated test that does not run to completion, or that fails because of an error in the test itself rather than missing behaviour? What does the user see, and is the run a failure?
-- Q-34: How does the orchestrator tell a test that fails because the behaviour is missing from a test that fails because of an error in the test?
-- Q-35: When a test passes before any implementation, how does the user decide whether the behaviour already exists or the test must be rejected, and what happens to the test and the lock after each decision?
-- Q-36: What does 'the current main state' mean for the orchestrator's test run when the user's working tree or current branch differs from main?
-- Q-37: What text replaces '<aspect>' in the 'deliberately unspecified: <aspect>' note handed to the test author for a decision answered free?
-- Q-38: How does Doppelblind tell existing acceptance tests and test infrastructure, which the test author sees, from unit tests, which it must not see, given that the contract declares nothing about tests other than the test author's path?
-- Q-39: How does Doppelblind find the interface signatures that 'a spec or contract fixes', which the test author may see, and in what form are they handed over?
-- Q-40: The existing acceptance tests are visible to the test author read-only, but an unlocked earlier run's tests are replaced. Is a write by the test author to an existing acceptance test of another spec rejected, and is a write to an earlier unlocked test of this spec allowed?
-- Q-41: How can a test tell from the outside that the process stopped in the stop cases (spec not final, spec missing, contract incomplete, no tests, no criterion proven by test, tests frozen, declined limit, rejected write)? This covers the exit status and whether the message text is fixed.
-- Q-42: What happens when the contract declares implementation, plan or test author paths that do not exist in the project?
-- Q-43: When the user continues the flow with the flow command and the spec is final, does the test author start right away, or does the user first confirm?
-- Q-44: How does a test author run know which spec belongs to a brief when the user names a brief, and what happens if a brief is connected to more than one spec?
+- Q-27: Once the user has entered a decision for every assumption in assumptions.md, what does the user do so that the lock gets written, and which step of Doppelblind reads those decisions?
+- Q-28: Besides every assumption having a valid decision, which conditions must hold for the lock to be written? This covers the case where the run produced no assumptions at all and the case where a test passed before implementation and the user has not decided about it yet.
+- Q-29: What do the lock and the test inventory contain, where are they written, and how can someone outside Doppelblind check that a locked acceptance test or review file has changed?
+- Q-30: When the user rejects an assumption, how is the test author started again? What does the new run receive from the rejected assumption, how many such rounds are allowed, and what happens when they are used up?
+- Q-31: How does a decided assumption reach later test author and spec-create runs of the spec, and what does such a later run see of it?
+- Q-32: How does Doppelblind tell which paths of a project hold existing acceptance tests, test infrastructure (fixtures, helpers, stubs) and unit tests, so it can show the first two read-only to the test author and hide the unit tests?
+- Q-33: What counts as 'the project has no tests yet' for the check that stops the run?
+- Q-34: Which interface signatures does the test author see, and how does a spec or the contract fix them so that Doppelblind can hand them over?
+- Q-35: How does Doppelblind decide which criteria a question answered `free` affects, and what text names the aspect in the 'deliberately unspecified' entry?
+- Q-36: Is the run folder in .doppelblind kept when the user declines to raise a time or cost limit, given that nothing of the run may then be written to the project and that a failed run keeps its folder?
+- Q-37: When the orchestrator's own test run finds a generated acceptance test that does not run to completion, or fails because of an error in the test rather than because the behaviour is missing, what happens and what does the user see?
+- Q-38: How does the orchestrator know how to run a project's acceptance tests for its own test run, and how does it tell a failed assertion apart from an error in the test?
+- Q-39: What exactly is 'the current main state' that the generated tests run against, for example when the working tree has uncommitted changes?
+- Q-40: Where and how is a test that passes before implementation reported, how does the user decide whether the behaviour already exists or the test must be rejected, and what happens after each decision?
+- Q-41: What happens when the generated acceptance tests break the rules that each test carries exactly one criterion ID and that every criterion proven by test has at least one test?
+- Q-42: Is assumptions.md written when the test author reports no assumption, and if so, what does it contain?
+- Q-43: What happens when the single-step start names a brief that has no connected spec, or one connected to more than one spec?
+- Q-44: What short detail does the TUI show on each finished step line?
 
 ## Open questions
 

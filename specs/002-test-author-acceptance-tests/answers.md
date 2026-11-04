@@ -117,6 +117,7 @@ the TUI shows one line per step: reading the final spec, preparing what the test
 Where and in what form are the test author's assumptions recorded, and does the user see them in the TUI at the end of the run?
 
 **Answer:**
+
 The orchestrator writes the assumptions to `assumptions.md` in the spec's folder, next to `spec.md`. Each assumption is a section headed by its ID (A-001, A-002, …) and states the criterion, the assumption phrased as a question someone who does not know the code can answer, its kind (gap, ambiguous, not measurable, contradiction), the test files that rely on it, and an empty `**Decision:**` field. A valid decision is `accepted` or `rejected: <own text>`; a decided assumption binds later runs like an answer. The acceptance tests are frozen only when every assumption has a valid decision. The run record keeps the raw output for analysis, not for decisions. At the end of the run the TUI shows the number of assumptions and the path of `assumptions.md`, not the assumptions themselves.
 
 ### Q-16

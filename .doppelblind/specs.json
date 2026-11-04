@@ -1,14 +1,12 @@
 {
   "docs/briefs/orchestrator-spec-agent.md": {
     "folder": "specs/001-orchestrator-spec-agent",
-    "final": true,
-    "run": ".doppelblind/runs/2026-11-03T17-21-55-679Z-spec-agent",
-    "lastQuestion": 45
+    "run": ".doppelblind/runs/2026-11-04T01-39-52-887Z-spec-agent",
+    "final": true
   },
   "docs/briefs/test-agent.md": {
     "folder": "specs/002-test-author-acceptance-tests",
-    "run": ".doppelblind/runs/2026-11-03T18-48-51-626Z-spec-agent",
-    "lastQuestion": 44,
+    "run": ".doppelblind/runs/2026-11-04T01-43-19-762Z-spec-agent",
     "final": true
   }
 }
