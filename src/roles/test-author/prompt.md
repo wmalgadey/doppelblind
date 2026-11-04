@@ -25,7 +25,7 @@ A good test rejects a wrong implementation of its criterion and accepts a correc
 
 Where a criterion cannot be tested without a decision it does not make (a command name, a file format, an exit code), make the narrowest choice that lets you test it, and report it as an assumption with the criterion's ID. Report every such choice; an assumption you do not report is an error.
 
-Number your assumptions `A-001`, `A-002`, … in the order you report them. For every test file, list the IDs of the assumptions its tests rest on, or none.
+Number your assumptions `A-001`, `A-002`, … in the order you report them. For every test, list the IDs of the assumptions it rests on, or none.
 
 A note `decided: <text>` on a criterion is a decision the user made: follow it, and report no assumption for it.
 
@@ -33,4 +33,4 @@ If a criterion contradicts itself or cannot be measured from the outside, test o
 
 ## Your answer
 
-List every test file you wrote with the one criterion it covers and the assumptions it rests on, and every assumption. Do not describe how the tests turned out; the orchestrator runs them itself.
+List every test you wrote with its file, its name, the one criterion it covers and the assumptions it rests on, and every assumption. Do not describe how the tests turned out; the orchestrator runs them itself.
