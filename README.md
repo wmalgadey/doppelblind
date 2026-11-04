@@ -31,6 +31,8 @@ The spec agent runs in these steps:
 2. Clarify run: you answer the questions manually in `spec.md`, or start the flow again and mark unanswered question with `free` or `out of scope`. If you `finish` the clarify run while any question is unanswered, those questions will be marked `unanswered` and the spec-agent is finished.
 3. If all questions are answered, another spec-create run starts at once and writes a new `spec.md` with new open questions. You then choose to answer them (the command ends; answer them and run the flow again, back at step 2) or to mark them all `unanswered`, which finishes the spec-agent.
 
+A final spec starts no further spec-create run. To write it again anyway, e.g. after you extended the brief, run `doppelblind spec <brief> --force`: the spec agent writes a new `spec.md` in the same folder with every answer given so far, and the spec step is open again. Questions recorded as `unanswered` are no answers; they may come up again. `--force` is refused while the spec's acceptance tests are locked.
+
 Answering does not make the open questions fewer: every spec-create run starts from scratch, and an answer can bring up decisions nobody saw before. The loop does not end by itself, so you decide when the spec is clear enough.
 
 Each acceptance criteria will result in a frosen acceptance test, every answere marked `free` will be open to the implementation agent and is not tested.

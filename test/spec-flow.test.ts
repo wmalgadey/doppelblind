@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, test } from "vitest";
 import type { Agent, AgentRequest } from "../src/agent/claude.ts";
@@ -724,5 +724,62 @@ describe("spec-flow: continuing a feature", () => {
     const calls: AgentRequest[] = [];
     await assert.rejects(feature(root, [], fakeAgent(TWO_QUESTIONS, calls)).run, /The spec step of docs\/briefs\/greeting.md is final/);
     assert.equal(calls.length, 0);
+  });
+
+  test("--force writes a final spec again with every answer so far and opens the spec step again", async () => {
+    const { root, specFile } = await firstSpecCreateRun();
+    answer(specFile, "Q-01", "Hello.");
+    await feature(root, ["free", "unanswered"], fakeAgent(TWO_QUESTIONS)).run;
+    assert.equal(state(root).final, true);
+
+    const calls: AgentRequest[] = [];
+    const ui = recordingUi();
+    const result = await runSpecFlow({ cwd: root, brief: BRIEF_PATH, ui, agent: fakeAgent(TWO_QUESTIONS, calls), force: true });
+
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0].userMessage.includes("Hello.") && calls[0].userMessage.includes("free"));
+    assert.ok(ui.events.includes("note: the spec step is final; --force starts another spec-create run and opens it again"));
+    assert.equal(result.specFile, specFile);
+    assert.equal(result.status, "open");
+    assert.equal(state(root).final, undefined);
+    // the new run's questions follow every number given out before
+    assert.match(readFileSync(specFile, "utf8"), /### Q-05\n/);
+    assert.match(readFileSync(specFile, "utf8"), /## Unanswered\n\nNone\.\n/);
+  });
+
+  test("--force on a final spec whose questions are all unanswered starts a spec-create run, also from the complete flow", async () => {
+    const { root } = await firstSpecCreateRun();
+    await feature(root, ["finish", "yes"], fakeAgent(TWO_QUESTIONS)).run;
+    assert.equal(state(root).final, true);
+
+    const calls: AgentRequest[] = [];
+    const ui = recordingUi();
+    const result = await runSpecFlow({ cwd: root, brief: BRIEF_PATH, ui, agent: fakeAgent(TWO_QUESTIONS, calls), clarify: true, force: true });
+    assert.equal(calls.length, 1);
+    assert.equal(result.status, "open");
+    assert.ok(!ui.events.some((e) => e.startsWith("choose:")), ui.events.join("\n"));
+  });
+
+  test("--force is refused while the spec's acceptance tests are locked", async () => {
+    const { root, specFile } = await firstSpecCreateRun();
+    await feature(root, ["finish", "yes"], fakeAgent(TWO_QUESTIONS)).run;
+    const before = readFileSync(specFile, "utf8");
+    mkdirSync(path.join(root, ".doppelblind/locks"), { recursive: true });
+    writeFileSync(path.join(root, ".doppelblind/locks/001-greet-everyone.json"), "{}");
+
+    const calls: AgentRequest[] = [];
+    await assert.rejects(runSpecFlow({ cwd: root, brief: BRIEF_PATH, ui: recordingUi(), agent: fakeAgent(TWO_QUESTIONS, calls), force: true }),
+      (err: DoppelblindError) => /are locked; the spec is not written again/.test(err.message) &&
+        (err.details ?? []).some((d) => d.includes(".doppelblind/locks/001-greet-everyone.json")));
+    assert.equal(calls.length, 0);
+    assert.equal(readFileSync(specFile, "utf8"), before);
+    assert.equal(state(root).final, true);
+  });
+
+  test("without --force, the refusal of a final spec names the option", async () => {
+    const { root } = await firstSpecCreateRun();
+    await feature(root, ["finish", "yes"], fakeAgent(TWO_QUESTIONS)).run;
+    await assert.rejects(runSpecFlow({ cwd: root, brief: BRIEF_PATH, ui: recordingUi(), agent: fakeAgent(TWO_QUESTIONS) }),
+      (err: DoppelblindError) => (err.details ?? []).includes("Run `doppelblind spec docs/briefs/greeting.md --force` to write the spec again with every answer given so far."));
   });
 });

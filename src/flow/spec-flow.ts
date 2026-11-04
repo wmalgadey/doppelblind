@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { lockPath, readLock } from "../acceptance/lock.ts";
 import { runClaude, TRACE_FILE, type Agent } from "../agent/claude.ts";
 import { loadContract, toProjectPath, type Contract } from "../contract.ts";
 import { DoppelblindError } from "../errors.ts";
@@ -39,6 +40,11 @@ export interface SpecFlowOptions {
    * without an answer and whether another spec-create run starts, instead of starting one straight away.
    */
   clarify?: boolean;
+  /**
+   * Start a spec-create run even when the spec step is final: the spec is written afresh with every answer given so far
+   * and is open again. Refused while the spec's acceptance tests are locked.
+   */
+  force?: boolean;
 }
 
 /** The brief counts as too vague: more questions were answered `free` than the project allows. */
@@ -104,12 +110,28 @@ export async function runSpecFlow(options: SpecFlowOptions): Promise<SpecFlowRes
   for (const p of sources.missing) ui.note(`declared source not found, skipped: ${p}`);
 
   const ctx = { root: contract.root, limits: contract.limits, specsDir: path.join(contract.root, contract.specs), briefPath, sources, options };
-  const recorded = readState(contract.root)[briefPath];
+  let recorded = readState(contract.root)[briefPath];
+  const reopened = Boolean(recorded?.final);
   if (recorded?.final) {
-    throw new DoppelblindError(`The spec step of ${briefPath} is final; no further spec-create run starts.`, [`Spec: ${recorded.folder}/${SPEC_FILE}`]);
+    if (!options.force) {
+      throw new DoppelblindError(`The spec step of ${briefPath} is final; no further spec-create run starts.`, [
+        `Spec: ${recorded.folder}/${SPEC_FILE}`,
+        `Run \`doppelblind spec ${briefPath} --force\` to write the spec again with every answer given so far.`,
+      ]);
+    }
+    const name = path.posix.basename(recorded.folder);
+    if (readLock(contract.root, name)) {
+      throw new DoppelblindError(`The acceptance tests of ${recorded.folder}/${SPEC_FILE} are locked; the spec is not written again.`, [
+        `A new spec would no longer match the frozen tests: ${lockPath(name)}`,
+      ]);
+    }
+    ui.note(`the spec step is final; --force starts another spec-create run and opens it again`);
+    const { final: _, ...open } = recorded;
+    recorded = open;
   }
   const previous = recorded && readPrevious(contract.root, briefPath, recorded.folder);
-  if (!previous || !options.clarify) {
+  // a final spec has no clarify run left: it is written again straight away
+  if (!previous || !options.clarify || reopened) {
     if (previous) noteRerun(ui, previous);
     return withBriefGaps(ctx, await specCreate(ctx, recorded, previous));
   }

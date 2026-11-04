@@ -30,6 +30,8 @@ Options:
   --budget <usd>    Cost limit for each agent run in USD
                     (default: spec agent ${DEFAULT_BUDGET_USD}, test author ${DEFAULT_TEST_AUTHOR_BUDGET_USD})
   --max-turns <n>   Turn limit for the test author (default: ${DEFAULT_TEST_AUTHOR_MAX_TURNS}); it is never raised
+  --force           spec only: write the spec again even when the spec step is final; it is open again
+                    afterwards and keeps every answer given so far. Refused while its acceptance tests are locked
 
 A project changes these defaults in the "limits" object of .doppelblind.conf:
   { "limits": { "specAgent": { "timeoutMin": 5, "budgetUsd": 1 },
@@ -51,6 +53,7 @@ async function main(argv: string[]): Promise<number> {
       timeout: { type: "string" },
       budget: { type: "string" },
       "max-turns": { type: "string" },
+      force: { type: "boolean" },
     },
   });
 
@@ -63,6 +66,8 @@ async function main(argv: string[]): Promise<number> {
   if (!target || rest.length > 0) return usageError(`${command} expects exactly one path.`);
   // the tests command takes a spec as it is; the spec agent's commands work on the brief connected to it
   const brief = command === "tests" ? specTarget(process.cwd(), target) : briefTarget(process.cwd(), target);
+
+  if (values.force && command !== "spec") return usageError("--force applies only to the spec command.");
 
   const ui = terminalUi();
   ui.banner();
@@ -86,6 +91,7 @@ async function main(argv: string[]): Promise<number> {
     ui,
     ...limitOptions(values),
     clarify: command === "feature",
+    force: values.force,
   });
 
   const specFile = path.relative(process.cwd(), result.specFile);
@@ -133,7 +139,7 @@ function reportBriefGaps(brief: string, gaps: BriefGaps, final: boolean): void {
     for (const q of questions) lines.push(`      - ${q.id}: ${q.question}`);
   }
   lines.push(final
-    ? "  The spec step is already final: the extended brief reaches the spec agent only in a new spec-create run."
+    ? `  The spec step is already final: run \`doppelblind spec ${brief} --force\` to hand the extended brief to the spec agent.`
     : `  Then run \`doppelblind spec ${brief}\` for a new spec-create run with the extended brief.`);
   process.stderr.write(lines.join("\n") + "\n");
 }
