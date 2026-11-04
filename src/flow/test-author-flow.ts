@@ -2,11 +2,12 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { lockPath, readLock, writeLock } from "../acceptance/lock.ts";
 import { readRecord, writeRecord, type TestAuthorRecord } from "../acceptance/record.ts";
-import { passes, runTestFile, testCommand, type TestFileResult } from "../acceptance/test-run.ts";
+import { runReport, type ReportRun, type TestResult } from "../acceptance/test-run.ts";
 import { runClaude, TRACE_FILE, type Agent, type AgentRequest, type AgentResponse } from "../agent/claude.ts";
 import { checkWrites, copyWritten, createWorkspace, hash, hasTests, planView, removeWorkspace, type ViewPlan, type Workspace } from "../boundary/view.ts";
-import { CONTRACT_FILE, loadContract, toProjectPath, type Contract } from "../contract.ts";
+import { CONTRACT_FILE, loadContract, requireAcceptance, toProjectPath, type Contract } from "../contract.ts";
 import { AgentLimitError, DoppelblindError } from "../errors.ts";
+import { checkMapping } from "../gates/acceptance.ts";
 import { validateOutput } from "../gates/schema.ts";
 import * as testAuthor from "../roles/test-author/index.ts";
 import {
@@ -37,14 +38,22 @@ export interface TestAuthorOptions {
   timeoutMs?: number;
   maxBudgetUsd?: number;
   maxTurns?: number;
-  /** Time limit for each test file in the orchestrator's own test run. */
+  /** Time limit for each test file in the orchestrator's own test run; the run of a folder gets it once per test file. */
   testTimeoutMs?: number;
+}
+
+/** A test the test author wrote, with the IDs the assumptions it rests on have in assumptions.md. */
+export interface WrittenTest {
+  file: string;
+  name: string;
+  criterion: string;
+  assumptions: string[];
 }
 
 export interface TestAuthorResult {
   /** Project path of the spec.md the tests were written for. */
   spec: string;
-  tests: { file: string; criterion: string; assumptions: string[] }[];
+  tests: WrittenTest[];
   /** Other files the test author wrote next to its tests, such as helpers. */
   helpers: string[];
   /** Project path of review.md; undefined when the spec has no criterion proven by review. */
@@ -55,8 +64,8 @@ export interface TestAuthorResult {
   assumptionsFile?: string;
   /** How many assumptions in assumptions.md wait for a decision; the tests are not locked while any does. */
   undecided: number;
-  /** Test files that pass before any implementation; undefined when the project declares no test command. */
-  passing?: TestFileResult[];
+  /** The orchestrator's own test result before any implementation, each test with the criterion it counts for. */
+  results: TestResult[];
   /** Project path of the lock; undefined when the user kept the tests unlocked. */
   lock?: string;
 }
@@ -71,6 +80,7 @@ const TOOLS = ["Read", "Glob", "Grep", "Write", "Edit"];
 const REVIEW_FILE = "review.md";
 const OUTPUT_FILE = "output.json";
 const TEST_RUN_FILE = "test-run.json";
+const TEST_RESULT_FILE = "test-result.json";
 const LOCK = "lock";
 const KEEP_UNLOCKED = "keep unlocked";
 
@@ -127,8 +137,8 @@ export async function runTestAuthor(options: TestAuthorOptions): Promise<TestAut
     return lockDecided(ui, root, folder, assumptionsPath, record, decisions);
   }
 
-  const plan = await step(ui, "Preparing what the test author may see", () => planFor(contract, folder),
-    (p) => `${p.acceptanceTests.length + p.infrastructure.length} files visible, ${p.unitTests.length} unit tests hidden`);
+  const { plan, marking, report } = await step(ui, "Preparing what the test author may see", () => planFor(contract, folder),
+    ({ plan: p }) => `${p.acceptanceTests.length + p.infrastructure.length} files visible, ${p.unitTests.length} unit tests hidden`);
 
   const limits: Limits = {
     timeoutMs: options.timeoutMs ?? (contract.limits.testAuthor?.timeoutMin ?? DEFAULT_TEST_AUTHOR_TIMEOUT_MIN) * 60_000,
@@ -142,7 +152,7 @@ export async function runTestAuthor(options: TestAuthorOptions): Promise<TestAut
   const handed = testAuthor.handOver(spec, "test", decidedByCriterion(decisions));
   const request: AgentRequest = {
     systemPrompt: testAuthor.systemPrompt,
-    userMessage: testAuthor.buildUserMessage(handed, plan.writable, [...plan.acceptanceTests, ...plan.infrastructure]),
+    userMessage: testAuthor.buildUserMessage(handed, plan.writable, [...plan.acceptanceTests, ...plan.infrastructure], marking),
     schema: testAuthor.schema,
     tools: TOOLS,
     ...limits,
@@ -174,7 +184,7 @@ export async function runTestAuthor(options: TestAuthorOptions): Promise<TestAut
 
     const written = await withLog(log, async () => {
       const output = await step(ui, "Validating its output", () => validateOutput<testAuthor.TestAuthorOutput>(testAuthor.schema, response.output),
-        (o) => `${o.tests.length} test files, ${o.assumptions.length} assumptions`);
+        (o) => `${o.tests.length} tests in ${new Set(o.tests.map((t) => t.file)).size} files, ${o.assumptions.length} assumptions`);
       writeFileSync(path.join(runDir, OUTPUT_FILE), JSON.stringify(output, null, 2) + "\n");
 
       const files = await step(ui, "Checking its writes", () => {
@@ -188,19 +198,27 @@ export async function runTestAuthor(options: TestAuthorOptions): Promise<TestAut
     });
     // the agent numbers its assumptions from A-001 in every run; in assumptions.md they follow the earlier ones
     const ids = renumbered(written.output.assumptions, decisions);
-    const tests = written.output.tests.map((t) => ({ file: normalize(t.file), criterion: t.criterion, assumptions: t.assumptions.map((a) => ids.get(a)!) }));
-    for (const t of tests) ui.note(`wrote ${t.file} (${t.criterion})`);
+    const tests: WrittenTest[] = written.output.tests.map((t) => ({
+      file: normalize(t.file),
+      name: t.name,
+      criterion: t.criterion,
+      assumptions: t.assumptions.map((a) => ids.get(a)!),
+    }));
+    for (const t of tests) ui.note(`wrote ${t.file} › ${t.name} (${t.criterion})`);
+
+    // the gate on the criterion mapping comes before assumptions.md, so a failed gate leaves no assumption to decide
+    const results = await ownTestRun(options, contract, report, runDir, spec, plan.writable, tests);
+
     const added: Assumption[] = written.output.assumptions.map((a) => ({
       id: ids.get(a.id)!,
       criterion: a.criterion,
       assumption: a.assumption,
-      files: tests.filter((t) => t.assumptions.includes(ids.get(a.id)!)).map((t) => t.file),
+      files: [...new Set(tests.filter((t) => t.assumptions.includes(ids.get(a.id)!)).map((t) => t.file))],
     }));
     const entries = [...decisions, ...added];
     if (entries.length > 0) writeFileSync(path.join(root, assumptionsPath), renderAssumptions(SPEC_FILE, entries));
     for (const a of added) ui.note(`assumption ${a.id} (${a.criterion}): ${a.assumption}`);
 
-    const passing = await ownTestRun(options, contract, runDir, tests);
     const reviewPath = review && `${plan.writable}/${REVIEW_FILE}`;
     const helpers = written.files.filter((f) => !tests.some((t) => t.file === f));
     const result: TestAuthorResult = {
@@ -211,14 +229,14 @@ export async function runTestAuthor(options: TestAuthorOptions): Promise<TestAut
       assumptions: added,
       ...(entries.length > 0 && { assumptionsFile: assumptionsPath }),
       undecided: added.length,
-      ...(passing && { passing }),
+      results,
     };
     const completed: TestAuthorRecord = {
       run: toProjectPath(root, runDir),
       tests,
       helpers,
       ...(reviewPath && { review: reviewPath }),
-      ...(passing && { passing }),
+      results,
       handed: Object.fromEntries(decisions.map((a) => [a.id, a.raw])),
     };
 
@@ -231,7 +249,7 @@ export async function runTestAuthor(options: TestAuthorOptions): Promise<TestAut
     }
     writeRecord(root, name, completed);
     result.lock = await offerLock(ui, root, folder, completed, entries.length > 0 ? assumptionsPath : undefined, [
-      `${tests.length} test files${reviewPath ? ` and ${reviewPath}` : ""} in ${plan.writable}/`,
+      `${testFiles(tests).length} test files${reviewPath ? ` and ${reviewPath}` : ""} in ${plan.writable}/`,
       `no new assumptions${decisions.length > 0 ? `; ${decisions.length} decided in ${assumptionsPath}` : ""}`,
     ]);
     return result;
@@ -289,7 +307,7 @@ async function lockDecided(
   record: TestAuthorRecord,
   decisions: RecordedAssumption[],
 ): Promise<TestAuthorResult> {
-  const files = [...record.tests.map((t) => t.file), ...record.helpers, ...(record.review ? [record.review] : [])];
+  const files = [...testFiles(record.tests), ...record.helpers, ...(record.review ? [record.review] : [])];
   const missing = files.filter((f) => !existsSync(path.join(root, f)));
   if (missing.length > 0) {
     writeRecord(root, path.posix.basename(folder), { ...record, awaitingDecisions: undefined });
@@ -301,7 +319,7 @@ async function lockDecided(
   const accepted = decisions.filter((a) => a.decision?.kind === "accepted").length;
   ui.note(`every assumption in ${assumptionsPath} is decided: ${accepted} accepted, ${decisions.length - accepted} rejected and already applied`);
   const lock = await offerLock(ui, root, folder, record, assumptionsPath, [
-    `${record.tests.length} test files of ${record.run}`,
+    `${testFiles(record.tests).length} test files of ${record.run}`,
     `${decisions.length} assumptions decided in ${assumptionsPath}`,
   ]);
   writeRecord(root, path.posix.basename(folder), { ...record, awaitingDecisions: undefined });
@@ -313,7 +331,7 @@ async function lockDecided(
     assumptions: [],
     assumptionsFile: assumptionsPath,
     undecided: 0,
-    ...(record.passing && { passing: record.passing }),
+    results: record.results,
     ...(lock && { lock }),
   };
 }
@@ -328,33 +346,38 @@ async function offerLock(
   details: string[],
 ): Promise<string | undefined> {
   const specPath = `${folder}/${SPEC_FILE}`;
-  const { passing } = run;
   const question = `Lock the acceptance tests of ${specPath}? Locked tests are frozen: no later test author run replaces them.`;
   const shown = [
     ...details,
-    ...(passing ?? []).map((p) => `${p.criterion} passes before any implementation: ${p.file}`),
-    ...(passing ? [] : ["the tests were not run: the project declares no test command"]),
+    ...run.results.filter((r) => r.status === "passed").map((r) => `${r.criterion} passes before any implementation: ${r.file} › ${r.name}`),
+    ...run.results.filter((r) => r.status === "skipped").map((r) => `${r.criterion} is skipped: ${r.file} › ${r.name}`),
   ];
   if ((await ui.choose(question, [LOCK, KEEP_UNLOCKED], shown)) !== LOCK) {
     ui.note(`not locked: a later test author run on ${specPath} replaces these files`);
     return undefined;
   }
-  const files = [...run.tests.map((t) => t.file), ...run.helpers, ...(run.review ? [run.review] : []), ...(assumptionsPath ? [assumptionsPath] : [])];
+  const files = [...testFiles(run.tests), ...run.helpers, ...(run.review ? [run.review] : []), ...(assumptionsPath ? [assumptionsPath] : [])];
   return step(ui, "Writing the lock", () => writeLock(root, path.posix.basename(folder), {
     spec: specPath,
     specSha256: hash(path.join(root, specPath)),
     lockedAt: new Date().toISOString(),
     run: run.run,
-    files: files.map((f) => ({
-      path: f,
-      sha256: hash(path.join(root, f)),
-      criterion: run.tests.find((t) => t.file === f)?.criterion ?? null,
-    })),
+    files: files.map((f) => ({ path: f, sha256: hash(path.join(root, f)) })),
+    // the inventory comes from the test result, not from the test author's account
+    tests: run.results.map((r) => ({ file: r.file, name: r.name, criterion: r.criterion! })),
   }), (lock) => lock);
 }
 
-/** Decides what the test author sees; stops if the contract does not say what it must not see or where it writes. */
-function planFor(contract: Contract, folder: string): ViewPlan {
+/** The test files among `tests`, each once, in the order first listed. */
+function testFiles(tests: { file: string }[]): string[] {
+  return [...new Set(tests.map((t) => t.file))];
+}
+
+/**
+ * Decides what the test author sees; stops if the contract does not say what it must not see, where it writes, how
+ * it marks a test with its criterion, or how its tests are run: a run without these could not finish.
+ */
+function planFor(contract: Contract, folder: string): { plan: ViewPlan; marking: string; report: string } {
   const missing = [
     ...(contract.implementation?.length ? [] : ['"implementation": the paths that hold implementation code']),
     ...(contract.plan?.length ? [] : ['"plan": the paths that hold the plan']),
@@ -362,20 +385,23 @@ function planFor(contract: Contract, folder: string): ViewPlan {
   if (missing.length > 0) {
     throw new DoppelblindError(`${CONTRACT_FILE} does not declare what the test author must not see; the test author does not start.`, missing);
   }
-  if (!contract.acceptanceTests) {
+  if (!contract.acceptanceTests?.path) {
     throw new DoppelblindError(`${CONTRACT_FILE} declares no path for the test author; the test author does not start.`, [
-      '"acceptanceTests": the path the acceptance tests are written to',
+      '"acceptanceTests.path": the path the acceptance tests are written to',
     ]);
   }
+  const marking = requireAcceptance(contract, "marking", "how a test is marked with its criterion, with an example", "the test author does not start");
+  const report = requireAcceptance(contract, "report",
+    "the command that runs the acceptance tests of {folder} and writes the test result to {output}", "the acceptance tests cannot be run");
   const briefs = Object.keys(readState(contract.root));
   const excluded = [...contract.implementation!, ...contract.plan!, contract.specs, ...contract.sources, ...briefs, STATE_DIR, CONTRACT_FILE];
-  const plan = planView(contract.root, contract.acceptanceTests, path.posix.basename(folder), excluded);
+  const plan = planView(contract.root, contract.acceptanceTests.path, path.posix.basename(folder), excluded);
   if (!hasTests(plan)) {
     throw new DoppelblindError("The project has no tests yet; the test author does not start.", [
       "It writes acceptance tests only in the language and with the framework of the project's existing tests.",
     ]);
   }
-  return plan;
+  return { plan, marking, report };
 }
 
 /** Has the review guide written for the criteria proven by review, in a run of its own, and renders review.md. */
@@ -417,8 +443,8 @@ async function writeReviewGuide(
 }
 
 /**
- * Checks what the test author wrote against what it reports: nothing outside its folder, and every test file it
- * lists exists there and covers one criterion proven by test, each of which has a test file.
+ * Checks what the test author wrote against what it reports: nothing outside its folder, and every test it lists is
+ * in a file written there and covers one criterion proven by test, each of which has a test.
  * Returns the files that may reach the project.
  */
 function checkedWrites(ws: Workspace, spec: ParsedSpec, output: testAuthor.TestAuthorOutput): string[] {
@@ -431,44 +457,70 @@ function checkedWrites(ws: Workspace, spec: ParsedSpec, output: testAuthor.TestA
   const byTest = new Set(spec.criteria.filter((c) => c.provenBy === "test").map((c) => c.id));
   const problems: string[] = [];
   const covered = new Map<string, string>();
-  for (const { file, criterion } of output.tests) {
+  for (const { file, name, criterion } of output.tests) {
     const f = normalize(file);
-    if (!writes.written.includes(f)) problems.push(`${f} is listed as a test but was not written in ${ws.writable}/.`);
-    if (!byTest.has(criterion)) problems.push(`${f} covers ${criterion}, which is not a criterion proven by test.`);
-    if (covered.has(f) && covered.get(f) !== criterion) problems.push(`${f} is listed for ${covered.get(f)} and ${criterion}.`);
-    covered.set(f, criterion);
+    const at = `${f} › ${name}`;
+    if (!writes.written.includes(f)) problems.push(`${f} is listed as a test file but was not written in ${ws.writable}/.`);
+    if (!byTest.has(criterion)) problems.push(`${at} covers ${criterion}, which is not a criterion proven by test.`);
+    if (covered.has(at) && covered.get(at) !== criterion) problems.push(`${at} is listed for ${covered.get(at)} and ${criterion}.`);
+    covered.set(at, criterion);
   }
   for (const id of byTest) {
     if (![...covered.values()].includes(id)) problems.push(`${id} has no acceptance test.`);
   }
   const reported = output.assumptions.map((a) => a.id);
   for (const id of new Set(reported.filter((id, i) => reported.indexOf(id) !== i))) problems.push(`${id} is reported as more than one assumption.`);
-  for (const { file, assumptions } of output.tests) {
-    for (const id of assumptions) if (!reported.includes(id)) problems.push(`${normalize(file)} rests on ${id}, which is not a reported assumption.`);
+  for (const { file, name, assumptions } of output.tests) {
+    for (const id of assumptions) if (!reported.includes(id)) problems.push(`${normalize(file)} › ${name} rests on ${id}, which is not a reported assumption.`);
   }
   if (problems.length > 0) throw new DoppelblindError("The test author's output does not cover the spec as required.", problems);
   return writes.written;
 }
 
-/** Runs each test file with the project's own test command; the test author's account of its tests does not count. */
-async function ownTestRun(options: TestAuthorOptions, contract: Contract, runDir: string, tests: TestAuthorResult["tests"]) {
+/**
+ * Runs the spec's acceptance tests with the contract's report command and passes them through the gate on their
+ * criterion mapping; the test author's account of its tests does not count. Returns the tests with the criterion
+ * each counts for.
+ */
+async function ownTestRun(
+  options: TestAuthorOptions,
+  contract: Contract,
+  command: string,
+  runDir: string,
+  spec: ParsedSpec,
+  folder: string,
+  tests: WrittenTest[],
+): Promise<TestResult[]> {
   const { ui } = options;
-  const command = testCommand(contract);
-  if (!command) {
-    ui.note(`no test command: declare "testCommand" in ${CONTRACT_FILE} so that the orchestrator runs the tests`);
-    return undefined;
-  }
-  return step(ui, "Running the acceptance tests", async () => {
-    const results: TestFileResult[] = [];
-    for (const t of tests) {
-      results.push(await runTestFile(contract.root, command, t.file, t.criterion, options.testTimeoutMs ?? (contract.limits.testFileTimeoutMin ?? DEFAULT_TEST_FILE_TIMEOUT_MIN) * 60_000));
+  const perFile = options.testTimeoutMs ?? (contract.limits.testFileTimeoutMin ?? DEFAULT_TEST_FILE_TIMEOUT_MIN) * 60_000;
+  const run = await step(ui, "Running the acceptance tests", async () => {
+    let run: ReportRun | undefined;
+    try {
+      run = await runReport(contract.root, command, folder, path.join(runDir, TEST_RESULT_FILE), perFile * testFiles(tests).length);
+      return run;
+    } finally {
+      writeFileSync(path.join(runDir, TEST_RUN_FILE), JSON.stringify(run ?? { command }, null, 2) + "\n");
     }
-    writeFileSync(path.join(runDir, TEST_RUN_FILE), JSON.stringify({ command, results }, null, 2) + "\n");
-    const passing = results.filter(passes);
-    for (const p of passing) ui.note(`${p.criterion}: ${p.file} passes before any implementation`);
-    return passing;
-  }, (passing) => `${tests.length - passing.length} of ${tests.length} fail before any implementation` +
-    (passing.length > 0 ? `, ${passing.length} pass: ${passing.map((p) => p.criterion).join(", ")}` : ""));
+  }, (run) => `${run.results.length} tests`);
+
+  const byTest = new Set(spec.criteria.filter((c) => c.provenBy === "test").map((c) => c.id));
+  return step(ui, "Checking the criterion of each test", () => {
+    const checked = checkMapping(folder, byTest, tests, run.results);
+    for (const w of checked.warnings) ui.note(w);
+    if (checked.problems.length > 0) {
+      throw new DoppelblindError("The acceptance tests are not mapped to the spec's criteria as required.", checked.problems);
+    }
+    for (const t of checked.tests.filter((t) => t.status === "passed")) ui.note(`${t.criterion}: ${t.file} › ${t.name} passes before any implementation`);
+    for (const t of checked.tests.filter((t) => t.status === "skipped")) ui.note(`${t.criterion}: ${t.file} › ${t.name} is skipped`);
+    return checked.tests;
+  }, (checked) => {
+    const passing = checked.filter((t) => t.status === "passed");
+    const skipped = checked.filter((t) => t.status === "skipped").length;
+    const failing = checked.filter((t) => t.status === "failed").length;
+    return `${failing} of ${checked.length} fail before any implementation` +
+      (passing.length > 0 ? `, ${passing.length} pass: ${[...new Set(passing.map((p) => p.criterion))].join(", ")}` : "") +
+      (skipped > 0 ? `, ${skipped} skipped` : "");
+  });
 }
 
 /**

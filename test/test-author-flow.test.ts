@@ -18,8 +18,11 @@ const CONTRACT = {
   specs: "specs",
   implementation: ["src"],
   plan: ["docs/plan"],
-  acceptanceTests: "tests/acceptance",
-  testCommand: "node {file}",
+  acceptanceTests: {
+    path: "tests/acceptance",
+    marking: "MARKING RULE: a line `// test <criterion> <name>` per test.",
+    report: `node ${path.join(import.meta.dirname, "fixtures", "fake-report.mjs")} {folder} {output}`,
+  },
 };
 
 const criterion = sampleSpec().criteria[0];
@@ -64,22 +67,28 @@ function project(options: { contract?: object; spec?: SpecOutput; final?: boolea
   });
 }
 
-const FAIL = "process.exit(1);\n";
-const PASS = "process.exit(0);\n";
-
-type ReportedTest = { file: string; criterion: string; assumptions: string[] };
+type ReportedTest = { file: string; name: string; criterion: string; assumptions: string[] };
 type ReportedAssumption = { id: string; criterion: string; assumption: string };
+const GREETING = `${WRITABLE}/greeting.test.mjs`;
+const FAREWELL = `${WRITABLE}/farewell.test.mjs`;
 const TESTS: ReportedTest[] = [
-  { file: `${WRITABLE}/ac-001.test.mjs`, criterion: "AC-001", assumptions: [] },
-  { file: `${WRITABLE}/ac-002.test.mjs`, criterion: "AC-002", assumptions: [] },
+  { file: GREETING, name: "prints a greeting", criterion: "AC-001", assumptions: [] },
+  { file: FAREWELL, name: "says two", criterion: "AC-002", assumptions: [] },
 ];
+const [ONE, TWO] = TESTS;
+
+/** A test file for the fake report command: its tests, marked with `marks` (`-` for none), exit with `exit`. */
+function testFile(tests: { name: string; criterion: string }[], exit = 1, marks?: string[], kind = "test"): string {
+  return tests.map((t, i) => `// ${kind} ${marks?.[i] ?? t.criterion} ${t.name}\n`).join("") + `process.exit(${exit});\n`;
+}
+const FILES: Record<string, string> = { [GREETING]: testFile([ONE]), [FAREWELL]: testFile([TWO]) };
 
 /**
  * Stands in for both agents: as the test author (it has tools) it writes `files` into its working directory and
  * reports `tests` and `assumptions`; as the review guide it answers one entry per criterion in its message.
  */
 function fakeAgents(
-  files: Record<string, string> = { [`${WRITABLE}/ac-001.test.mjs`]: FAIL, [`${WRITABLE}/ac-002.test.mjs`]: FAIL },
+  files: Record<string, string> = FILES,
   calls: AgentRequest[] = [],
   tests: ReportedTest[] = TESTS,
   assumptions: ReportedAssumption[] = [],
@@ -148,6 +157,7 @@ describe("test-author-flow", () => {
     assert.ok(input.includes(`<criterion id="AC-001">\nGiven: the greeter is installed\nWhen: I run it\nThen: it prints a greeting\n` +
       "deliberately unspecified: Which words does the greeting use?\n</criterion>"));
     assert.ok(input.includes(`<criterion id="AC-002">\nGiven: two given\nWhen: two when\nThen: two then\n</criterion>`));
+    assert.ok(input.includes("<test-marking>\nMARKING RULE: a line `// test <criterion> <name>` per test.\n</test-marking>"));
     for (const hidden of ["AC-003", "review given", "TITLE", "REJECTS", "INTRODUCTION", "WISH", "OPEN QUESTION", "Being greeted", "Q-0"]) {
       assert.ok(!input.includes(hidden), `${hidden} was handed over`);
     }
@@ -179,16 +189,17 @@ describe("test-author-flow", () => {
     const ui = recordingUi(["lock"]);
     const result = await runTestAuthor({ cwd: root, target: BRIEF_PATH, ui, agent: fakeAgents() });
 
-    assert.deepEqual(result.tests.map((t) => t.file), [`${WRITABLE}/ac-001.test.mjs`, `${WRITABLE}/ac-002.test.mjs`]);
-    for (const t of result.tests) assert.equal(readFileSync(path.join(root, t.file), "utf8"), FAIL);
-    assert.deepEqual(result.passing, []);
+    assert.deepEqual(result.tests.map((t) => [t.file, t.name]), [[GREETING, ONE.name], [FAREWELL, TWO.name]]);
+    for (const t of result.tests) assert.equal(readFileSync(path.join(root, t.file), "utf8"), FILES[t.file]);
+    assert.deepEqual(result.results.map((t) => t.status), ["failed", "failed"]);
     assert.equal(result.lock, ".doppelblind/locks/001-greet-everyone.json");
 
     const lock = JSON.parse(readFileSync(lockFile(root), "utf8"));
-    assert.deepEqual(lock.files.map((f: { path: string; criterion: string | null }) => [f.path, f.criterion]), [
-      [`${WRITABLE}/ac-001.test.mjs`, "AC-001"],
-      [`${WRITABLE}/ac-002.test.mjs`, "AC-002"],
-      [`${WRITABLE}/review.md`, null],
+    assert.deepEqual(lock.files.map((f: { path: string }) => f.path), [GREETING, FAREWELL, `${WRITABLE}/review.md`]);
+    // the inventory comes from the test result; the report command lists the files in name order
+    assert.deepEqual(lock.tests, [
+      { file: FAREWELL, name: TWO.name, criterion: "AC-002" },
+      { file: GREETING, name: ONE.name, criterion: "AC-001" },
     ]);
     const labels = ui.events.filter((e) => e.startsWith("start: ")).map((e) => e.slice(7));
     assert.deepEqual(labels, [
@@ -200,9 +211,10 @@ describe("test-author-flow", () => {
       "Validating its output",
       "Checking its writes",
       "Running the acceptance tests",
+      "Checking the criterion of each test",
       "Writing the lock",
     ]);
-    assert.ok(ui.events.includes("done: Running the acceptance tests (2 of 2 fail before any implementation)"));
+    assert.ok(ui.events.includes("done: Checking the criterion of each test (2 of 2 fail before any implementation)"));
   });
 
   test("the TUI names the folder the agent writes into and shows its progress on the running step", async () => {
@@ -211,14 +223,14 @@ describe("test-author-flow", () => {
     const calls: AgentRequest[] = [];
     const inner = fakeAgents(undefined, calls);
     const agent: Agent = (request) => {
-      request.onProgress?.({ turns: 2, action: `Write ${WRITABLE}/ac-001.test.mjs` });
+      request.onProgress?.({ turns: 2, action: `Write ${GREETING}` });
       return inner(request);
     };
     await runTestAuthor({ cwd: root, target: BRIEF_PATH, ui, agent });
 
     assert.ok(ui.events.includes(`note: workspace: ${testAuthorCall(calls).workdir}/${WRITABLE}`), ui.events.join("\n"));
-    assert.ok(ui.events.includes(`update: Test author is writing the acceptance tests (turn 2 · Write ${WRITABLE}/ac-001.test.mjs)`));
-    assert.ok(ui.events.includes(`update: Test author is writing the review file (turn 2 · Write ${WRITABLE}/ac-001.test.mjs)`));
+    assert.ok(ui.events.includes(`update: Test author is writing the acceptance tests (turn 2 · Write ${GREETING})`));
+    assert.ok(ui.events.includes(`update: Test author is writing the review file (turn 2 · Write ${GREETING})`));
   });
 
   test("a test that passes before any implementation is reported with its criterion ID", async () => {
@@ -228,11 +240,11 @@ describe("test-author-flow", () => {
       cwd: root,
       target: BRIEF_PATH,
       ui,
-      agent: fakeAgents({ [`${WRITABLE}/ac-001.test.mjs`]: FAIL, [`${WRITABLE}/ac-002.test.mjs`]: PASS }),
+      agent: fakeAgents({ [GREETING]: testFile([ONE]), [FAREWELL]: testFile([TWO], 0) }),
     });
-    assert.deepEqual(result.passing?.map((p) => p.criterion), ["AC-002"]);
-    assert.ok(ui.events.includes(`note: AC-002: ${WRITABLE}/ac-002.test.mjs passes before any implementation`));
-    assert.ok(ui.events.some((e) => e === `detail: AC-002 passes before any implementation: ${WRITABLE}/ac-002.test.mjs`));
+    assert.deepEqual(result.results.filter((t) => t.status === "passed").map((p) => p.criterion), ["AC-002"]);
+    assert.ok(ui.events.includes(`note: AC-002: ${FAREWELL} › ${TWO.name} passes before any implementation`));
+    assert.ok(ui.events.some((e) => e === `detail: AC-002 passes before any implementation: ${FAREWELL} › ${TWO.name}`));
     assert.equal(result.lock, undefined);
     assert.ok(!existsSync(lockFile(root)));
   });
@@ -261,7 +273,7 @@ describe("test-author-flow", () => {
   test("an unlocked earlier run's files are replaced", async () => {
     const root = project({ files: { [`${WRITABLE}/ac-009.test.mjs`]: "old", [`${WRITABLE}/review.md`]: "old review" } });
     await runTestAuthor({ cwd: root, target: BRIEF_PATH, ui: recordingUi(["keep unlocked"]), agent: fakeAgents() });
-    assert.deepEqual(readdirSync(path.join(root, WRITABLE)).sort(), ["ac-001.test.mjs", "ac-002.test.mjs", "review.md"]);
+    assert.deepEqual(readdirSync(path.join(root, WRITABLE)).sort(), ["farewell.test.mjs", "greeting.test.mjs", "review.md"]);
     assert.notEqual(readFileSync(path.join(root, WRITABLE, "review.md"), "utf8"), "old review");
   });
 
@@ -281,6 +293,10 @@ describe("test-author-flow", () => {
     ["a brief with no connected spec", () => project({ files: { "docs/briefs/other.md": BRIEF } }), "docs/briefs/other.md", /No spec is connected/],
     ["a contract without implementation and plan paths", () => project({ contract: { ...CONTRACT, implementation: undefined, plan: [] } }), BRIEF_PATH, /does not declare what the test author must not see/],
     ["a contract without the test author's path", () => project({ contract: { ...CONTRACT, acceptanceTests: undefined } }), BRIEF_PATH, /declares no path for the test author/],
+    ["a contract without the test marking", () => project({ contract: { ...CONTRACT, acceptanceTests: { ...CONTRACT.acceptanceTests, marking: undefined } } }), BRIEF_PATH,
+      /declares no "acceptanceTests.marking"; the test author does not start/],
+    ["a contract without the report command", () => project({ contract: { ...CONTRACT, acceptanceTests: { ...CONTRACT.acceptanceTests, report: undefined } } }), BRIEF_PATH,
+      /declares no "acceptanceTests.report"; the acceptance tests cannot be run/],
     ["a project without tests", () => {
       const root = project();
       for (const f of ["test/greeter.test.mjs", "tests/acceptance/000-earlier/ac-001.test.mjs"]) spawnSync("rm", [path.join(root, f)]);
@@ -305,17 +321,17 @@ describe("test-author-flow", () => {
   test("a write outside the allowed path is rejected, fails the run naming it, and keeps the run folder and the files written so far, unlocked", async () => {
     const root = project();
     const ui = recordingUi();
-    const files = { [`${WRITABLE}/ac-001.test.mjs`]: FAIL, "src/greeter.mjs": "OVERWRITTEN", "escape.mjs": "x" };
+    const files = { [GREETING]: testFile([ONE]), "src/greeter.mjs": "OVERWRITTEN", "escape.mjs": "x" };
     await assert.rejects(runTestAuthor({ cwd: root, target: BRIEF_PATH, ui, agent: fakeAgents(files) }), (err: DoppelblindError) =>
       /wrote outside tests\/acceptance\/001-greet-everyone\//.test(err.message) &&
       err.details.includes("rejected: escape.mjs") &&
       err.details.includes("rejected: src/greeter.mjs") &&
-      err.details.includes(`incomplete, not locked: ${WRITABLE}/ac-001.test.mjs`));
+      err.details.includes(`incomplete, not locked: ${GREETING}`));
     assert.equal(readFileSync(path.join(root, "src/greeter.mjs"), "utf8"), "IMPLEMENTATION CONTENT");
     assert.ok(!existsSync(path.join(root, "escape.mjs")));
     assert.ok(ui.events.some((e) => e.startsWith("fail: Checking its writes (The test author wrote outside")));
 
-    assert.ok(existsSync(path.join(root, WRITABLE, "ac-001.test.mjs")));
+    assert.ok(existsSync(path.join(root, GREETING)));
     assert.ok(!existsSync(lockFile(root)));
     const run = runs(root).find((r) => r.endsWith("-test-author"))!;
     assert.deepEqual(readdirSync(path.join(root, ".doppelblind/runs", run)).sort(), ["guardrails.json", "input.md", "output.json", "system-prompt.md", "trace.jsonl"]);
@@ -329,6 +345,78 @@ describe("test-author-flow", () => {
     const tests = [TESTS[0]];
     await assert.rejects(runTestAuthor({ cwd: root, target: BRIEF_PATH, ui: recordingUi(), agent: fakeAgents(undefined, [], tests) }),
       (err: DoppelblindError) => err.details.includes("AC-002 has no acceptance test."));
+  });
+
+  test("one test file may hold the tests of several criteria; the lock lists each test with its criterion", async () => {
+    const root = project();
+    const both = `${WRITABLE}/greeter.test.mjs`;
+    const tests = TESTS.map((t) => ({ ...t, file: both }));
+    const result = await runTestAuthor({ cwd: root, target: BRIEF_PATH, ui: recordingUi(["lock"]), agent: fakeAgents({ [both]: testFile(tests) }, [], tests) });
+    assert.deepEqual(result.results.map((t) => [t.name, t.criterion]), [[ONE.name, "AC-001"], [TWO.name, "AC-002"]]);
+    const lock = JSON.parse(readFileSync(lockFile(root), "utf8"));
+    assert.deepEqual(lock.files.map((f: { path: string }) => f.path), [both, `${WRITABLE}/review.md`]);
+    assert.deepEqual(lock.tests.map((t: { criterion: string }) => t.criterion), ["AC-001", "AC-002"]);
+  });
+
+  const gateFailures: [string, Record<string, string>, string][] = [
+    ["a test without a criterion marking", { [GREETING]: testFile([ONE], 1, ["-"]), [FAREWELL]: testFile([TWO]) },
+      `${GREETING} › ${ONE.name} is marked with no criterion.`],
+    ["a test marked with a criterion proven by review", { [GREETING]: testFile([ONE], 1, ["AC-003"]), [FAREWELL]: testFile([TWO]) },
+      `${GREETING} › ${ONE.name} is marked AC-003, which is not a criterion of this spec proven by test.`],
+    ["a test marked with an ID that is not a criterion of the spec", { [GREETING]: testFile([ONE], 1, ["AC-099"]), [FAREWELL]: testFile([TWO]) },
+      `${GREETING} › ${ONE.name} is marked AC-099, which is not a criterion of this spec proven by test.`],
+    ["a test marked with another criterion than the test author lists", { [GREETING]: testFile([ONE], 1, ["AC-002"]), [FAREWELL]: testFile([TWO]) },
+      `${GREETING} › ${ONE.name} is listed by the test author for AC-001 but marked AC-002.`],
+  ];
+  for (const [name, files, problem] of gateFailures) {
+    test(`${name} fails the gate, leaves its files unlocked and writes no assumptions`, async () => {
+      const root = project();
+      const ui = recordingUi();
+      const assumption = { id: "A-001", criterion: "AC-002", assumption: "The greeter is called greet." };
+      const tests = [ONE, { ...TWO, assumptions: ["A-001"] }];
+      await assert.rejects(runTestAuthor({ cwd: root, target: BRIEF_PATH, ui, agent: fakeAgents(files, [], tests, [assumption]) }),
+        (err: DoppelblindError) => /not mapped to the spec's criteria/.test(err.message) && err.details.includes(problem) &&
+          err.details.includes(`incomplete, not locked: ${GREETING}`));
+      assert.ok(ui.events.some((e) => e.startsWith("fail: Checking the criterion of each test")));
+      assert.ok(!existsSync(path.join(root, FOLDER, "assumptions.md")));
+      assert.ok(!existsSync(lockFile(root)));
+      // nothing waits for a decision: the next run starts the test author
+      const calls: AgentRequest[] = [];
+      await runTestAuthor({ cwd: root, target: BRIEF_PATH, ui: recordingUi(["keep unlocked"]), agent: fakeAgents(undefined, calls) });
+      assert.ok(calls.some((c) => c.tools));
+    });
+  }
+
+  test("a report command that writes no test result stops the run with its output", async () => {
+    const root = project({ contract: { ...CONTRACT, acceptanceTests: { ...CONTRACT.acceptanceTests, report: "echo cannot run {folder} >&2; true {output}" } } });
+    await assert.rejects(runTestAuthor({ cwd: root, target: BRIEF_PATH, ui: recordingUi(), agent: fakeAgents() }),
+      (err: DoppelblindError) => /The report command wrote no test result/.test(err.message) &&
+        err.details.some((d) => d.includes(`cannot run ${WRITABLE}`)));
+  });
+
+  test("a skipped test counts as skipped for its criterion and is shown before the lock", async () => {
+    const root = project();
+    const ui = recordingUi(["lock"]);
+    const result = await runTestAuthor({
+      cwd: root, target: BRIEF_PATH, ui,
+      agent: fakeAgents({ [GREETING]: testFile([ONE]), [FAREWELL]: testFile([TWO], 1, undefined, "skip") }),
+    });
+    assert.deepEqual(result.results.find((t) => t.criterion === "AC-002")?.status, "skipped");
+    assert.ok(ui.events.includes(`note: AC-002: ${FAREWELL} › ${TWO.name} is skipped`));
+    assert.ok(ui.events.includes(`detail: AC-002 is skipped: ${FAREWELL} › ${TWO.name}`));
+    assert.ok(ui.events.includes("done: Checking the criterion of each test (1 of 2 fail before any implementation, 1 skipped)"));
+    assert.ok(result.lock);
+  });
+
+  test("a test without a marking in a file named after a criterion counts for that criterion, with a warning", async () => {
+    const root = project();
+    const ui = recordingUi(["lock"]);
+    const legacy = `${WRITABLE}/ac-001.test.mjs`;
+    const tests = [{ ...ONE, file: legacy }, TWO];
+    await runTestAuthor({ cwd: root, target: BRIEF_PATH, ui, agent: fakeAgents({ [legacy]: testFile([ONE], 1, ["-"]), [FAREWELL]: testFile([TWO]) }, [], tests) });
+    assert.ok(ui.events.includes(`note: legacy criterion mapping: ${legacy} › ${ONE.name} counts for AC-001 by its file name; mark the test instead.`));
+    const lock = JSON.parse(readFileSync(lockFile(root), "utf8"));
+    assert.deepEqual(lock.tests.find((t: { file: string }) => t.file === legacy).criterion, "AC-001");
   });
 
   test("each run keeps its own folder with input, guardrails and the limits given at the start", async () => {
@@ -394,7 +482,7 @@ describe("test-author-flow", () => {
         cwd: declined, target: BRIEF_PATH, ui: recordingUi(["no"]),
         agent: async (request) => {
           if (!request.tools) return fakeAgents()(request);
-          writeFileSync(path.join(request.workdir!, WRITABLE, "ac-001.test.mjs"), FAIL);
+          writeFileSync(path.join(request.workdir!, GREETING), testFile([ONE]));
           throw new AgentLimitError(limit, "limit reached");
         },
       }), AgentLimitError);
@@ -447,8 +535,8 @@ describe("assumption decisions", () => {
     assert.deepEqual(result.tests.map((t) => t.assumptions), [["A-002"], ["A-001"]]);
 
     const md = readFileSync(path.join(root, ASSUMPTIONS), "utf8");
-    assert.ok(md.includes(`## A-001\n\n**Criterion:** AC-002\n\n**Assumption:** The greeter is called greet.\n\n**Test files:**\n\n- ${WRITABLE}/ac-002.test.mjs\n\n**Decision:**\n\n## A-002`));
-    assert.ok(md.endsWith(`## A-002\n\n**Criterion:** AC-001\n\n**Assumption:** The greeter exits with 0.\n\n**Test files:**\n\n- ${WRITABLE}/ac-001.test.mjs\n\n**Decision:**\n`));
+    assert.ok(md.includes(`## A-001\n\n**Criterion:** AC-002\n\n**Assumption:** The greeter is called greet.\n\n**Test files:**\n\n- ${FAREWELL}\n\n**Decision:**\n\n## A-002`));
+    assert.ok(md.endsWith(`## A-002\n\n**Criterion:** AC-001\n\n**Assumption:** The greeter exits with 0.\n\n**Test files:**\n\n- ${GREETING}\n\n**Decision:**\n`));
   });
 
   test("a run without assumptions writes no assumptions.md and offers the lock at once", async () => {
@@ -483,10 +571,10 @@ describe("assumption decisions", () => {
 
     assert.equal(calls.length, 0);
     assert.deepEqual(result.tests, first.tests);
-    assert.deepEqual(result.passing, first.passing);
+    assert.deepEqual(result.results, first.results);
     assert.equal(result.lock, ".doppelblind/locks/001-greet-everyone.json");
     const lock = JSON.parse(readFileSync(lockFile(root), "utf8"));
-    assert.deepEqual(lock.files.map((f: { path: string }) => f.path), [`${WRITABLE}/ac-001.test.mjs`, `${WRITABLE}/ac-002.test.mjs`, `${WRITABLE}/review.md`, ASSUMPTIONS]);
+    assert.deepEqual(lock.files.map((f: { path: string }) => f.path), [GREETING, FAREWELL, `${WRITABLE}/review.md`, ASSUMPTIONS]);
     assert.ok(ui.events.includes("note: every assumption in specs/001-greet-everyone/assumptions.md is decided: 2 accepted, 0 rejected and already applied"));
   });
 
@@ -545,7 +633,7 @@ describe("assumption decisions", () => {
   test("a test file resting on an assumption that is not reported fails the run", async () => {
     const root = project();
     await assert.rejects(runTestAuthor({ cwd: root, target: BRIEF_PATH, ui: recordingUi(), agent: fakeAgents(undefined, [], resting([["A-007"], []]), [greet]) }),
-      (err: DoppelblindError) => err.details.includes(`${WRITABLE}/ac-001.test.mjs rests on A-007, which is not a reported assumption.`));
+      (err: DoppelblindError) => err.details.includes(`${GREETING} › ${ONE.name} rests on A-007, which is not a reported assumption.`));
     assert.ok(!existsSync(path.join(root, ASSUMPTIONS)));
   });
 });

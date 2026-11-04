@@ -15,12 +15,23 @@ export interface Contract {
   implementation?: string[];
   /** Paths that hold the plan; absent from what the test author can access. */
   plan?: string[];
-  /** The test author's path: each spec's acceptance tests and review file go into a folder named after the spec's. */
-  acceptanceTests?: string;
-  /** Command that runs one test file, with `{file}` for its path; without `{file}`, the path is appended. */
-  testCommand?: string;
+  /** How the project's acceptance tests are written and run. */
+  acceptanceTests?: AcceptanceTests;
   /** The project's defaults for the limits; an option given at the start of a run overrides them. */
   limits: ContractLimits;
+}
+
+/** The acceptance test entries of the contract; each step that needs one stops when it is missing. */
+export interface AcceptanceTests {
+  /** The test author's path: each spec's acceptance tests and review file go into a folder named after the spec's. */
+  path?: string;
+  /** Tells the test author how to mark a test with its criterion, with an example. */
+  marking?: string;
+  /**
+   * Command that runs the acceptance tests of the folder `{folder}` and writes Doppelblind's test result to `{output}`:
+   * a JSON list with `{ file, name, criterion, status }` for each test.
+   */
+  report?: string;
 }
 
 /** Limits a project may declare; each one left out falls back to Doppelblind's own default. */
@@ -53,6 +64,11 @@ export function loadContract(cwd: string): Contract {
 
   const { sources = DEFAULTS.sources, specs = DEFAULTS.specs, implementation, plan, acceptanceTests, testCommand, limits } =
     raw as Record<string, unknown>;
+  if (testCommand !== undefined) {
+    throw new DoppelblindError(`${file}: "testCommand" is replaced by "acceptanceTests.report".`, [
+      '"acceptanceTests": { "path": …, "marking": …, "report": "<command> {folder} {output}" }',
+    ]);
+  }
   if (!Array.isArray(sources) || !sources.every((s) => typeof s === "string")) {
     throw new DoppelblindError(`${file}: "sources" must be a list of paths.`);
   }
@@ -64,11 +80,7 @@ export function loadContract(cwd: string): Contract {
       throw new DoppelblindError(`${file}: "${key}" must be a list of paths.`);
     }
   }
-  for (const [key, value] of Object.entries({ acceptanceTests, testCommand })) {
-    if (value !== undefined && (typeof value !== "string" || value.trim() === "")) {
-      throw new DoppelblindError(`${file}: "${key}" must be a ${key === "testCommand" ? "command" : "path"}.`);
-    }
-  }
+  const acceptance = parseAcceptanceTests(file, acceptanceTests);
   const project = (p: string) => toProjectPath(root, path.resolve(root, p));
   return {
     root,
@@ -77,9 +89,41 @@ export function loadContract(cwd: string): Contract {
     specs: project(specs),
     ...(implementation !== undefined && { implementation: (implementation as string[]).map(project) }),
     ...(plan !== undefined && { plan: (plan as string[]).map(project) }),
-    ...(acceptanceTests !== undefined && { acceptanceTests: project(acceptanceTests as string) }),
-    ...(testCommand !== undefined && { testCommand: testCommand as string }),
+    ...(acceptance && { acceptanceTests: { ...acceptance, ...(acceptance.path !== undefined && { path: project(acceptance.path) }) } }),
   };
+}
+
+/** Reads `acceptanceTests`: an object with `path`, `marking` and `report`, or, as before, only its path. */
+function parseAcceptanceTests(file: string, raw: unknown): AcceptanceTests | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw === "string") raw = { path: raw };
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new DoppelblindError(`${file}: "acceptanceTests" must be an object with "path", "marking" and "report".`);
+  }
+  const what = { path: "a path", marking: "a text", report: "a command" } as const;
+  const result: AcceptanceTests = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!(key in what)) throw new DoppelblindError(`${file}: "acceptanceTests.${key}" is not known; known: path, marking, report.`);
+    if (typeof value !== "string" || value.trim() === "") {
+      throw new DoppelblindError(`${file}: "acceptanceTests.${key}" must be ${what[key as keyof typeof what]}.`);
+    }
+    result[key as keyof AcceptanceTests] = value;
+  }
+  if (result.report !== undefined && !(result.report.includes("{folder}") && result.report.includes("{output}"))) {
+    throw new DoppelblindError(`${file}: "acceptanceTests.report" must contain {folder} and {output}.`, [
+      "{folder}: the folder whose acceptance tests it runs; {output}: the file it writes the test result to",
+    ]);
+  }
+  return result;
+}
+
+/** The contract entry `key` of `acceptanceTests`; stops with a message naming it when the contract lacks it. */
+export function requireAcceptance(contract: Contract, key: keyof AcceptanceTests, purpose: string, consequence: string): string {
+  const value = contract.acceptanceTests?.[key];
+  if (value === undefined) {
+    throw new DoppelblindError(`${CONTRACT_FILE} declares no "acceptanceTests.${key}"; ${consequence}.`, [`"acceptanceTests.${key}": ${purpose}`]);
+  }
+  return value;
 }
 
 const LIMIT_KEYS = {

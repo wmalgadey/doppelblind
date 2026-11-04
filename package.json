@@ -5,7 +5,8 @@
   "type": "module",
   "private": true,
   "bin": {
-    "doppelblind": "src/cli.ts"
+    "doppelblind": "src/cli.ts",
+    "doppelblind-vitest": "src/adapters/vitest.ts"
   },
   "engines": {
     "node": ">=24"

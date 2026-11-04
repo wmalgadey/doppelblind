@@ -13,7 +13,7 @@ A good test rejects a wrong implementation of its criterion and accepts a correc
 
 - Write files only into the folder the user message names. Every write anywhere else is rejected and fails your run. Do not change the existing files.
 - Write the tests in the language and with the test framework that the existing tests and the test infrastructure use. Reuse their helpers and fixtures; import them by their relative path.
-- Put the tests of each criterion into a file of their own, named after the criterion's ID, e.g. `ac-001.test.ts` for a TypeScript project. Every test in that file covers exactly that criterion, and its name begins with the criterion's ID. Shared setup goes into helper files in the same folder, never into a test.
+- Name each test file after the behaviour it tests, not after a criterion ID. A file may hold tests of several criteria. Mark every test with the ID of exactly one criterion, in the way the `<test-marking>` section of the user message prescribes; use that marker for nothing else. Shared setup goes into helper files in the same folder, never into a test.
 - Write one test per concrete example the criterion describes. Test an edge case only where the criterion names it. Where a criterion states an invariant, write a property test if the framework supports one.
 - Every expected value comes from the criterion or is a fixed literal. Never compute an expected value the way the implementation would.
 - Test from the outside, through what a user or a calling system does: commands and their arguments, files read and written, output. Never depend on internal structure you cannot see.

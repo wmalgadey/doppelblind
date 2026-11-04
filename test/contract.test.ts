@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "vitest";
-import { loadContract } from "../src/contract.ts";
+import { loadContract, requireAcceptance } from "../src/contract.ts";
 import { DoppelblindError } from "../src/errors.ts";
 import { makeProject } from "./helpers.ts";
 
@@ -31,6 +31,45 @@ describe("contract limits", () => {
       [{ clarifyRounds: 3 }, /"limits.clarifyRounds" is not a limit/],
     ] as const) {
       assert.throws(() => loadContract(withLimits(limits)), (err: DoppelblindError) => message.test(err.message), JSON.stringify(limits));
+    }
+  });
+});
+
+describe("contract acceptance tests", () => {
+  const withAcceptance = (acceptanceTests: unknown, extra: object = {}) =>
+    makeProject({ ".doppelblind.conf": JSON.stringify({ acceptanceTests, ...extra }) });
+  const REPORT = "doppelblind-vitest {folder} {output}";
+
+  test("reads the path, the marking and the report command", () => {
+    const contract = loadContract(withAcceptance({ path: "tests/acceptance/", marking: "Tag it.", report: REPORT }));
+    assert.deepEqual(contract.acceptanceTests, { path: "tests/acceptance", marking: "Tag it.", report: REPORT });
+    assert.equal(requireAcceptance(contract, "marking", "how", "stops"), "Tag it.");
+    assert.equal(requireAcceptance(contract, "report", "how", "stops"), REPORT);
+  });
+
+  test("a path alone is read as before", () => {
+    assert.deepEqual(loadContract(withAcceptance("tests/acceptance")).acceptanceTests, { path: "tests/acceptance" });
+  });
+
+  test("a missing marking or report command stops the step that needs it with a message naming the entry", () => {
+    for (const contract of [loadContract(withAcceptance({ path: "t" })), loadContract(makeProject({ ".doppelblind.conf": "{}" }))]) {
+      for (const key of ["marking", "report"] as const) {
+        assert.throws(() => requireAcceptance(contract, key, "what it is", "the step stops"), (err: DoppelblindError) =>
+          err.message === `.doppelblind.conf declares no "acceptanceTests.${key}"; the step stops.` && err.details[0] === `"acceptanceTests.${key}": what it is`);
+      }
+    }
+  });
+
+  test("rejects wrong entries, a report command without its placeholders and the replaced testCommand", () => {
+    for (const [conf, message] of [
+      [withAcceptance(["t"]), /"acceptanceTests" must be an object/],
+      [withAcceptance({ path: "t", marking: "" }), /"acceptanceTests.marking" must be a text/],
+      [withAcceptance({ report: 3 }), /"acceptanceTests.report" must be a command/],
+      [withAcceptance({ command: "x" }), /"acceptanceTests.command" is not known; known: path, marking, report/],
+      [withAcceptance({ report: "vitest {folder}" }), /"acceptanceTests.report" must contain \{folder\} and \{output\}/],
+      [withAcceptance("t", { testCommand: "node {file}" }), /"testCommand" is replaced by "acceptanceTests.report"/],
+    ] as const) {
+      assert.throws(() => loadContract(conf), (err: DoppelblindError) => message.test(err.message), String(message));
     }
   });
 });

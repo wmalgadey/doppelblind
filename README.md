@@ -45,22 +45,27 @@ The project declares its binding sources and the specs directory in `.doppelblin
 
 Once a spec is final, the test author writes the acceptance tests for every criterion proven by test. It never sees the implementation, and this is enforced, not asked for: it runs under [bubblewrap](https://github.com/containers/bubblewrap) (`bwrap`, Linux) in a temporary directory that holds only the existing acceptance tests and the test infrastructure, read-only. The project, your home and the host's `/tmp` do not exist in its file system. Of the spec it gets only ID, Given, When and Then of the criteria proven by test, and for each decision answered `free` a note `deliberately unspecified: …`.
 
-The contract declares what it must not see and where it writes; without these the run stops:
+The contract declares what it must not see, where it writes, how it marks a test with its criterion and how the tests are run; without these the run stops:
 
 ```json
 {
   "implementation": ["src"],
   "plan": ["docs/plan"],
-  "acceptanceTests": "tests/acceptance",
-  "testCommand": "npx vitest run {file}"
+  "acceptanceTests": {
+    "path": "tests/acceptance",
+    "marking": "Mark a test with its criterion by a Vitest tag: test(\"…\", { tags: [\"AC-006\"] }, …). Put no tags on describe.",
+    "report": "npx doppelblind-vitest {folder} {output}"
+  }
 }
 ```
 
+- `marking` goes to the test author as the `<test-marking>` section of its message. `report` runs the acceptance tests of `{folder}` and writes Doppelblind's test result to `{output}`: a JSON list with `{ "file", "name", "criterion", "status" }` per test, `criterion` the criterion ID or `null`, `status` `passed`, `failed` or `skipped`. Doppelblind reads only this format, so any test framework works with a command that writes it. For Vitest, Doppelblind ships `doppelblind-vitest`: it runs Vitest with its JSON reporter and `--strictTags=false` (tags need no declaration) and takes the criterion from the test's tag; a test with more than one criterion tag is an error.
+
 - Test infrastructure is every file in a `test`, `tests`, `__tests__` or `spec` folder that is not itself a test file, plus the test configuration at the root (`package.json`, `tsconfig.json`, `vitest.config.*` …). Test files outside `acceptanceTests` are unit tests and stay hidden. A project without any test stops the run: the test author writes in the language and framework the existing tests use.
-- It may write only into `<acceptanceTests>/<spec folder>/`, one test file per criterion. The orchestrator compares its directory before and after; any other write fails the run with the rejected path, and nothing of it reaches the project. A new run replaces the spec's earlier, unlocked files.
-- Criteria proven by review go to a second run without tools that gets only those criteria; the orchestrator renders its answer as `<acceptanceTests>/<spec folder>/review.md`, one section per criterion. Without such criteria there is no review file.
-- The orchestrator then runs each test file itself with `testCommand` (default: `npm test -- {file}` if `package.json` has a test script) and reports every file that passes before any implementation, with its criterion ID.
-- Finally you choose `lock` or `keep unlocked`. The lock in `.doppelblind/locks/<spec folder>.json` holds the hash of every file; a later run on a locked spec stops.
+- It may write only into `<acceptanceTests.path>/<spec folder>/`. It names test files after behaviour; a file may hold tests of several criteria, each test marked with exactly one. The orchestrator compares its directory before and after; any other write fails the run with the rejected path, and nothing of it reaches the project. A new run replaces the spec's earlier, unlocked files.
+- Criteria proven by review go to a second run without tools that gets only those criteria; the orchestrator renders its answer as `<acceptanceTests.path>/<spec folder>/review.md`, one section per criterion. Without such criteria there is no review file.
+- The orchestrator then runs the spec's folder itself with `report` and checks the test result: a test fails the gate if it has no criterion, if its ID is not a criterion of the spec proven by test, or if the test author lists it under another criterion; every criterion proven by test needs a test. A test without a marking in a file named `ac-NNN.test.*` counts for AC-NNN, with the warning `legacy criterion mapping`. Every test that passes before any implementation is reported with its criterion ID, every skipped one as skipped.
+- Finally you choose `lock` or `keep unlocked`. The lock in `.doppelblind/locks/<spec folder>.json` holds the hash of every file and every test with its criterion; a later run on a locked spec stops.
 
 Limits: `--timeout` (default 30 minutes), `--budget` (default $10) and `--max-turns` (default 100). At the time or cost limit you are asked whether to double it and start over; the turn limit is never raised. Each run keeps its folder in `.doppelblind/runs/<timestamp>-test-author/` (and `-review-guide/`) like a spec agent run, with `guardrails.json` and `test-run.json`. The test author writes into a temporary workspace that the TUI names as `workspace: …`; you can watch its files appear there, and they reach the project only after the write check.
 

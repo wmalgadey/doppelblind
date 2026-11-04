@@ -16,7 +16,7 @@ export interface HandedCriterion {
 
 /** The test author's output, as its schema describes it. */
 export interface TestAuthorOutput {
-  tests: { file: string; criterion: string; assumptions: string[] }[];
+  tests: { file: string; name: string; criterion: string; assumptions: string[] }[];
   assumptions: { id: string; criterion: string; assumption: string }[];
 }
 
@@ -58,11 +58,13 @@ export function handOver(spec: ParsedSpec, provenBy: SpecCriterion["provenBy"], 
 
 /**
  * The only spec content the test author gets: ID, Given, When and Then of each criterion proven by test,
- * with the aspects answered `free` and the decided assumptions, and where it writes. Never the spec file, its introduction or its questions.
+ * with the aspects answered `free` and the decided assumptions, how the project marks a test with its criterion
+ * (`marking`, from the contract), and where it writes. Never the spec file, its introduction or its questions.
  */
-export function buildUserMessage(criteria: HandedCriterion[], writable: string, visible: string[]): string {
+export function buildUserMessage(criteria: HandedCriterion[], writable: string, visible: string[], marking: string): string {
   return [
     `<criteria>\n${criteria.map((c) => renderCriterion(c)).join("\n\n")}\n</criteria>`,
+    `<test-marking>\n${marking.trim()}\n</test-marking>`,
     `<workspace>\nWrite your files into: ${writable}/\n\nFiles in your working directory (read-only):\n` +
       (visible.length > 0 ? visible.map((f) => `- ${f}`).join("\n") : "None.") +
       "\n</workspace>",

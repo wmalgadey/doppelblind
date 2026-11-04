@@ -13,7 +13,9 @@ export interface Lock {
   lockedAt: string;
   /** The test author run that wrote the files. */
   run: string;
-  files: { path: string; sha256: string; criterion: string | null }[];
+  files: { path: string; sha256: string }[];
+  /** Every acceptance test with the criterion it counts for, from the orchestrator's own test result. */
+  tests: { file: string; name: string; criterion: string }[];
 }
 
 /** Project path of the lock of the spec in folder `specFolderName`. */

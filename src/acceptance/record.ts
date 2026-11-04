@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { DoppelblindError } from "../errors.ts";
 import { STATE_DIR } from "../spec/state.ts";
-import type { TestFileResult } from "./test-run.ts";
+import type { TestResult } from "./test-run.ts";
 
 /** Where the orchestrator records the last completed test author run of each spec, out of the test author's reach. */
 export const RECORDS_DIR = `${STATE_DIR}/test-author`;
@@ -11,11 +11,11 @@ export const RECORDS_DIR = `${STATE_DIR}/test-author`;
 export interface TestAuthorRecord {
   /** Project path of the run folder. */
   run: string;
-  tests: { file: string; criterion: string; assumptions: string[] }[];
+  tests: { file: string; name: string; criterion: string; assumptions: string[] }[];
   helpers: string[];
   review?: string;
-  /** Test files that passed before any implementation; undefined when the project declares no test command. */
-  passing?: TestFileResult[];
+  /** The orchestrator's own test result before any implementation, each test with the criterion it counts for. */
+  results: TestResult[];
   /** Every decided assumption the run received, by ID: its Decision field as the user wrote it. */
   handed: Record<string, string>;
   /** Set while the lock waits for decisions on assumptions in assumptions.md. */
