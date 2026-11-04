@@ -234,7 +234,7 @@ async function clarify(ctx: Context, recorded: BriefState, previous: Previous): 
   writeAnswerLog(ctx.root, previous);
   const { file: specFile } = await step(ui, `Writing ${SPEC_FILE}`, () => writeSpec(ctx, recorded.folder, last, record, previous),
     (written) => describeWrite(ctx.root, written, previous));
-  writeState(ctx.root, ctx.briefPath, { ...recorded, final: true });
+  writeState(ctx.root, ctx.briefPath, { folder: recorded.folder, ...(recorded.run && { run: recorded.run }), final: true });
   return { ...counts(last, record), specFile, status: "final", stopped: [] };
 }
 
@@ -284,9 +284,8 @@ async function specCreate(
       const problems = checkSpec(output, citable);
       if (problems.length > 0) throw new DoppelblindError("The spec does not pass its gates.", problems);
     }, () => `${output.criteria.length} criteria`);
-    const lastQuestions = readOutput(ctx.root, recorded)?.open_questions ?? [];
-    const used = [...(previous?.answers ?? []), ...lastQuestions].map((q) => q.id);
-    const spec = renumberQuestions(output, Math.max(recorded?.lastQuestion ?? 0, highestQuestion(used)));
+    // the new questions follow the questions that remain: those answered so far, in answers.md and spec.md
+    const spec = renumberQuestions(output, highestQuestion((previous?.answers ?? []).map((a) => a.id)));
     writeFileSync(path.join(runDir, OUTPUT_FILE), JSON.stringify(spec, null, 2) + "\n");
 
     const unanswered = finalRun ? spec.open_questions.map((q) => q.id) : [];
@@ -317,7 +316,6 @@ async function specCreate(
     folder: toProjectPath(ctx.root, path.dirname(specFile)),
     ...(final && { final: true as const }),
     run: toProjectPath(ctx.root, runDir),
-    lastQuestion: Math.max(recorded?.lastQuestion ?? 0, highestQuestion(spec.open_questions.map((q) => q.id))),
   });
 
   return { ...counts(spec, record), specFile, status, stopped: [] };

@@ -50,7 +50,7 @@ function project(options: { contract?: object; spec?: SpecOutput; final?: boolea
   const unanswered = s.open_questions.filter((q) => q.id !== "Q-01").map((q) => q.id);
   return makeProject({
     ".doppelblind.conf": JSON.stringify(options.contract ?? CONTRACT),
-    ".doppelblind/specs.json": JSON.stringify({ [BRIEF_PATH]: { folder: FOLDER, ...(options.final !== false && { final: true }), lastQuestion: 2 } }),
+    ".doppelblind/specs.json": JSON.stringify({ [BRIEF_PATH]: { folder: FOLDER, ...(options.final !== false && { final: true }) } }),
     ".doppelblind/runs/2026-01-01T00-00-00-000Z-spec-agent/input.md": "RUN RECORD",
     [`${FOLDER}/spec.md`]: renderSpec(s, BRIEF_PATH, "../../docs/briefs/greeting.md", { answers: free, unanswered }),
     [`${FOLDER}/answers.md`]: "ANSWERS FILE",

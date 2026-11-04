@@ -113,17 +113,30 @@ describe("spec-flow", () => {
     assert.ok(!existsSync(path.join(root, "specs/001-greet-everyone/answers.md")));
   });
 
-  test("a question number is never reused, even after a run without questions", async () => {
+  test("new questions follow the highest answered question, even after a run without questions", async () => {
     const root = project();
     const opts = { cwd: root, brief: "docs/briefs/greeting.md", ui: recordingUi() };
-    await runSpecFlow({ ...opts, agent: fakeAgent(sampleSpec()) });
+    const first = await runSpecFlow({ ...opts, agent: fakeAgent(sampleSpec()) });
+    answer(first.specFile, "Q-01", "Hello.");
     await runSpecFlow({ ...opts, agent: fakeAgent(sampleSpec({ open_questions: [] })) });
     const third = await runSpecFlow({
       ...opts,
       agent: fakeAgent(sampleSpec({ open_questions: [{ id: "Q-01", question: "Which colour?", concerns: [] }] })),
     });
     assert.match(readFileSync(third.specFile, "utf8"), /### Q-02\n\nWhich colour\?/);
-    assert.equal(readState(root)["docs/briefs/greeting.md"].lastQuestion, 2);
+    // the numbering comes from the questions, not from the run state
+    assert.deepEqual(Object.keys(readState(root)["docs/briefs/greeting.md"]).sort(), ["folder", "run"]);
+  });
+
+  test("the number of a question that was never answered is given out again", async () => {
+    const root = project();
+    const opts = { cwd: root, brief: "docs/briefs/greeting.md", ui: recordingUi() };
+    await runSpecFlow({ ...opts, agent: fakeAgent(sampleSpec()) });
+    const second = await runSpecFlow({
+      ...opts,
+      agent: fakeAgent(sampleSpec({ open_questions: [{ id: "Q-01", question: "Which colour?", concerns: [] }] })),
+    });
+    assert.match(readFileSync(second.specFile, "utf8"), /## Open questions\n\n### Q-01\n\nWhich colour\?/);
   });
 
   test("a brief's spec is recognised from the run state, not from what spec.md says", async () => {
@@ -137,7 +150,7 @@ describe("spec-flow", () => {
     assert.deepEqual(Object.keys(state), ["docs/briefs/greeting.md"]);
     assert.equal(state["docs/briefs/greeting.md"].folder, "specs/001-greet-everyone");
     // ready or open is computed from the spec, never stored
-    assert.deepEqual(Object.keys(state["docs/briefs/greeting.md"]).sort(), ["folder", "lastQuestion", "run"]);
+    assert.deepEqual(Object.keys(state["docs/briefs/greeting.md"]).sort(), ["folder", "run"]);
   });
 
   test("answers accumulate across spec-create runs with their question's text", async () => {
@@ -396,8 +409,8 @@ describe("spec-flow: continuing a feature", () => {
     const { run } = feature(root, ["free", "free", "answer"], fakeAgent(TWO_QUESTIONS));
     const sixth = await run;
     assert.equal(sixth.status, "open");
-    // six runs of two questions each: the sixth asks Q-11 and Q-12
-    assert.match(readFileSync(sixth.specFile, "utf8"), /### Q-11\n[\s\S]*### Q-12\n/);
+    // nothing was answered before the sixth run: its questions follow the two answered free
+    assert.match(readFileSync(sixth.specFile, "utf8"), /### Q-03\n[\s\S]*### Q-04\n/);
     assert.ok(!readFileSync(path.join(root, ".doppelblind/specs.json"), "utf8").includes("limit reached"));
   });
 
@@ -540,8 +553,8 @@ describe("spec-flow: continuing a feature", () => {
     assert.equal(result.outOfScope, 0);
     assert.equal(result.openQuestions, 0);
     assert.equal(state(root).final, true);
-    // the extra run's questions follow Q-01 and Q-02 of the first run
-    assert.deepEqual(state(root), { folder: "specs/001-greet-everyone", run: state(root).run, final: true, lastQuestion: 4 });
+    // the extra run's questions follow the answered Q-01 and Q-02 of the first run
+    assert.deepEqual(state(root), { folder: "specs/001-greet-everyone", run: state(root).run, final: true });
 
     const md = readFileSync(result.specFile, "utf8");
     assert.match(md, /## Unanswered\n\n- Q-03: Which words does the greeting use\?\n- Q-04: Which colour is the greeting\?\n\n## Open questions\n\nNone\.\n$/);
@@ -633,7 +646,7 @@ describe("spec-flow: continuing a feature", () => {
     assert.equal(result.status, "final");
     assert.deepEqual([result.leftOpen, result.outOfScope, result.unanswered, result.openQuestions], [1, 0, 1, 0]);
     assert.equal(state(root).final, true);
-    assert.deepEqual(Object.keys(state(root)).sort(), ["final", "folder", "lastQuestion", "run"]);
+    assert.deepEqual(Object.keys(state(root)).sort(), ["final", "folder", "run"]);
     assert.deepEqual(loggedAnswers(root), ["Q-01 free"]);
     const md = readFileSync(specFile, "utf8");
     assert.match(md, /## Left open\n\n- Q-01: Which words does the greeting use\?\n\n## Out of scope\n\nNone\.\n\n## Unanswered\n\n- Q-02: Which colour is the greeting\?\n\n## Open questions\n\nNone\.\n$/);
@@ -647,7 +660,8 @@ describe("spec-flow: continuing a feature", () => {
     assert.equal(calls.length, 1);
     assert.ok(calls[0].userMessage.includes("Hello."));
     assert.equal(result.status, "final");
-    assert.match(readFileSync(result.specFile, "utf8"), /## Unanswered\n\n- Q-03: Which words does the greeting use\?\n- Q-04: Which colour is the greeting\?\n/);
+    // the extra run's questions follow the answered Q-01; the old Q-02 went unanswered and its number is free again
+    assert.match(readFileSync(result.specFile, "utf8"), /## Unanswered\n\n- Q-02: Which words does the greeting use\?\n- Q-03: Which colour is the greeting\?\n/);
     assert.deepEqual(loggedAnswers(root), ["Q-01 Hello."]);
   });
 
@@ -742,8 +756,8 @@ describe("spec-flow: continuing a feature", () => {
     assert.equal(result.specFile, specFile);
     assert.equal(result.status, "open");
     assert.equal(state(root).final, undefined);
-    // the new run's questions follow every number given out before
-    assert.match(readFileSync(specFile, "utf8"), /### Q-05\n/);
+    // the new questions follow the answered Q-01 and Q-02; the numbers of the unanswered Q-03 and Q-04 are free again
+    assert.match(readFileSync(specFile, "utf8"), /## Open questions\n\n### Q-03\n[^]*### Q-04\n/);
     assert.match(readFileSync(specFile, "utf8"), /## Unanswered\n\nNone\.\n/);
   });
 

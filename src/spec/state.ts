@@ -18,8 +18,6 @@ export interface BriefState {
   final?: true;
   /** Project-relative path of the run folder of the last spec-create run, which holds the agent's validated output. */
   run?: string;
-  /** The highest question number any spec-create run of the brief has given out, so a number is never reused. */
-  lastQuestion?: number;
 }
 
 /** The recorded state of every brief that has a spec, keyed by the brief's project-relative path. */

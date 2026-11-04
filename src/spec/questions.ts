@@ -11,9 +11,10 @@ export function highestQuestion(ids: string[]): number {
 }
 
 /**
- * Renumbers the agent's open questions so that they follow `after`, the highest question number the brief has
- * used so far. The agent numbers from Q-01 in every spec-create run; after renumbering, a question ID names the
- * same question across all runs of a brief. `depends_on` follows the new IDs.
+ * Renumbers the agent's open questions so that they follow `after`, the highest number of a question the brief still
+ * has: one answered so far. The agent numbers from Q-01 in every spec-create run; after renumbering, no new question
+ * takes the ID of an answered one. Numbers of questions that were never answered are given out again. `depends_on`
+ * follows the new IDs.
  */
 export function renumberQuestions(spec: SpecOutput, after: number): SpecOutput {
   const ids = new Map(spec.open_questions.map((q, i) => [q.id, `Q-${String(after + i + 1).padStart(2, "0")}`]));
